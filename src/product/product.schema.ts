@@ -6,32 +6,32 @@ export type ProductDocument = HydratedDocument<Product>;
 
 @Schema({ timestamps: true })
 export class Product {
-    @Prop()
-    title: string;
+  @Prop()
+  title: string;
 
-    @Prop()
-    information: string;
+  @Prop()
+  information: string;
 
-    @Prop()
-    picture: string;
+  @Prop()
+  picture: string;
 
-    @Prop()
-    price: number;
+  @Prop()
+  price: number;
 
-    @Prop()
-    code: string;
+  @Prop()
+  code: string;
 
-    @Prop()
-    discount: number;
+  @Prop()
+  discount: number;
 
-    @Prop()
-    count: number;
+  @Prop()
+  count: number;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Category' })
-    category: Types.ObjectId;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Category' })
+  category: Types.ObjectId;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-    author: Types.ObjectId;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  author: Types.ObjectId;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
