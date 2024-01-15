@@ -7,7 +7,7 @@ import { UserService } from '../user/user.service';
 import * as bcrypt from 'bcryptjs';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
-import { payloadJwt, PRIVATE_KEY_REFRESH } from '../constants';
+import { payloadJwt } from '../constants';
 import { IGenerateTokenPayload, ReqUser } from '../types';
 import { MeDto } from './dto/me-dto';
 
@@ -66,16 +66,22 @@ export class AuthService {
   }
 
   async updateRefreshToken(dto: { refresh_token: string }) {
-    const { username } = await this.jwtService.verify(dto.refresh_token);
-
-    const user = await this.userService.findUserByUsername(username);
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
-    if (user.refreshToken != dto.refresh_token) {
+    try {
+      const { username, ...res } = await this.jwtService.verify(
+        dto.refresh_token,
+      );
+      console.log(res);
+      const user = await this.userService.findUserByUsername(username);
+      if (!user) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      if (user.refreshToken != dto.refresh_token) {
+        throw new HttpException('Invalid token', HttpStatus.FORBIDDEN);
+      }
+      return this.generateAuthTokens(user, true);
+    } catch (e) {
       throw new HttpException('Invalid token', HttpStatus.FORBIDDEN);
     }
-    return this.generateAuthTokens(user, true);
   }
 
   async generateAuthTokens(user: IGenerateTokenPayload, newRefresh?: boolean) {

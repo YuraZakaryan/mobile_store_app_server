@@ -9,6 +9,7 @@ import { TReturnItem } from './types';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import * as bcrypt from 'bcryptjs';
+import { EXPIRE_TIME_REFRESH } from 'src/constants';
 
 @Injectable()
 export class UserService {
@@ -100,7 +101,9 @@ export class UserService {
     type: string;
     username: string;
   }): Promise<string> {
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign(payload, {
+      expiresIn: EXPIRE_TIME_REFRESH + 'd',
+    });
   }
 
   async findUserById(_id: Types.ObjectId) {

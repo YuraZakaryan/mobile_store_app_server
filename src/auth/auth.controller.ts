@@ -55,7 +55,6 @@ export class AuthController {
 
   @Put('token/refresh')
   updateRefreshToken(@Body() dto: { refresh_token: string }) {
-    console.log('dwad');
     return this.authService.updateRefreshToken(dto);
   }
 
