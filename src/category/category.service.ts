@@ -108,7 +108,7 @@ export class CategoryService {
 
     const products = await this.productModel.find({ category: id });
 
-    if (!products && products.length === 0) {
+    if (!products || products.length === 0) {
       const deletedCategory = await this.categoryModel.findByIdAndDelete(id);
 
       if (!deletedCategory) {

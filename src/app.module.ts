@@ -19,7 +19,9 @@ import * as path from 'path';
     ServeStaticModule.forRoot({
       rootPath: path.resolve(__dirname, '..', 'static'),
     }),
-    MongooseModule.forRoot('mongodb+srv://tigran:tigran@cluster0.homud.mongodb.net/yur'),
+    MongooseModule.forRoot(
+      'mongodb+srv://tigran:tigran@cluster0.homud.mongodb.net/yur',
+    ),
     UserModule,
     AuthModule,
     CategoryModule,

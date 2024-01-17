@@ -38,6 +38,9 @@ export class User {
   @Prop()
   confirmed: boolean;
 
+  @Prop({ default: false })
+  banned: boolean;
+
   @Prop()
   refreshToken: string;
 }

@@ -41,6 +41,9 @@ export class OrderService {
     if (!user.confirmed) {
       throw new HttpException('User not confirmed yet', HttpStatus.CONFLICT);
     }
+    if (user.banned) {
+      throw new HttpException('User banned', HttpStatus.GONE);
+    }
 
     if (!existOrder) {
       const orderItem = await this.orderItemModel.create(dto);

@@ -29,6 +29,7 @@ import { TReturnItem } from './types';
 import { FindOneParams } from '../types';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
+import { Types } from 'mongoose';
 
 @ApiTags('User')
 @Controller('user')
@@ -66,13 +67,18 @@ export class UserController {
     name: 'confirmed',
     required: false,
   })
+  @ApiQuery({
+    name: 'banned',
+    required: false,
+  })
   @Get('all')
   async getAll(
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
     @Query('confirmed') confirmed?: boolean,
+    @Query('banned') banned?: boolean,
   ): Promise<TReturnItem<User[]>> {
-    return this.userService.getAll(limit, skip, confirmed);
+    return this.userService.getAll(limit, skip, confirmed, banned);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -137,7 +143,31 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update user' })
+  @ApiOperation({ summary: 'Banned or UnBanned user' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User banned or unBanned successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Users not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'User is not auth!',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Access denied',
+  })
+  @ApiParam({ name: 'id' })
+  @Put('ban/:id')
+  async toggleBan(@Param() params: FindOneParams) {
+    return this.userService.toggleBan(params);
+  }
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete user' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'User deleted successfully',
@@ -156,7 +186,7 @@ export class UserController {
   })
   @ApiParam({ name: 'id' })
   @Delete(':id')
-  async deleteOne(@Param() params: FindOneParams) {
+  async deleteOne(@Param() params: FindOneParams): Promise<Types.ObjectId> {
     return this.userService.deleteOne(params);
   }
 }

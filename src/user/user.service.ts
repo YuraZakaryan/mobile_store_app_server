@@ -40,17 +40,21 @@ export class UserService {
     limit?: number,
     skip?: number,
     confirmed?: boolean,
+    banned?: boolean,
   ): Promise<TReturnItem<User[]>> {
-    const query = this.userModel.find();
-
+    const query = this.userModel.find().sort({ _id: -1 });
     if (confirmed !== undefined) {
       query.where('confirmed').equals(confirmed);
+    } else if (banned !== undefined) {
+      query.where('banned').equals(banned);
     }
 
     const totalItemsQuery = this.userModel.find();
 
     if (confirmed !== undefined) {
       totalItemsQuery.where('confirmed').equals(confirmed);
+    } else if (banned !== undefined) {
+      totalItemsQuery.where('banned').equals(confirmed);
     }
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
@@ -131,15 +135,34 @@ export class UserService {
     return user;
   }
 
-  async deleteOne(params: FindOneParams) {
+  async deleteOne(params: FindOneParams): Promise<Types.ObjectId> {
     const id = params.id;
-    const user = await this.userModel.findByIdAndDelete(id);
+
+    const user = await this.userModel.findById(id);
+    const deletedUser = await this.userModel.findByIdAndDelete(id);
+
+    if (!deletedUser) {
+      throw new HttpException(
+        'Error deleting user',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return user._id;
+  }
+
+  async toggleBan(params: FindOneParams) {
+    const id = params.id;
+    const user = await this.userModel.findById(id);
+
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
+    user.banned = !user.banned;
+    await user.save();
+
     return {
-      message: 'Successfully deleted',
-      user,
+      message: `${user.banned ? 'User banned' : 'User unbanned'}`,
     };
   }
 
