@@ -14,6 +14,7 @@ export enum EOrderStatus {
   ORDERED = 'ordered',
   ACCEPTED = 'accepted',
   DELIVERED = 'delivered',
+  REJECTED = 'rejected',
 }
 
 @Schema({ timestamps: true })
@@ -32,6 +33,9 @@ export class Order {
 
   @Prop()
   deliveredTime: Date;
+
+  @Prop()
+  rejectedTime: Date;
 
   @Prop()
   necessaryNotes: string;

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { EOrderStatus, Order } from './schema/order.schema';
+import { Order } from './schema/order.schema';
 import { FindOneParams } from '../types';
 import {
   ApiOperation,
@@ -49,7 +49,7 @@ export class OrderController {
   })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
   @Post()
-  createOrEdit(@Body() dto: CreateOrderDto): Promise<Order> {
+  createOrEdit(@Body() dto: CreateOrderDto) {
     return this.orderService.createOrAdd(dto);
   }
 
@@ -141,7 +141,7 @@ export class OrderController {
     name: 'skip',
     required: false,
   })
-  @Get('delivered')
+  @Get('history')
   getDeliveredOrders(
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,

@@ -20,7 +20,7 @@ export class OrderService {
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
-  async createOrAdd(dto: CreateOrderDto): Promise<Order> {
+  async createOrAdd(dto: CreateOrderDto) {
     // Search order by author and status will be equal in progress
     const existOrder = await this.orderModel.findOne({
       author: dto.author,
@@ -28,7 +28,9 @@ export class OrderService {
     });
 
     // Find product, when it doesn't exist, show error
-    const product = await this.productModel.findById(dto.product);
+    const product = await this.productModel
+      .findById(dto.product)
+      .populate('author');
     if (!product) {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
@@ -45,6 +47,13 @@ export class OrderService {
       throw new HttpException('User banned', HttpStatus.GONE);
     }
 
+    if (dto.itemCount > product.count) {
+      throw new HttpException(
+        'Not enough quantity in stock',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
     if (!existOrder) {
       const orderItem = await this.orderItemModel.create(dto);
       // Create order when it doesn't exist
@@ -54,20 +63,13 @@ export class OrderService {
         necessaryNotes: '',
         packaging: EPackage.BAG,
         items: [orderItem._id],
-        acceptedTime: '',
-        confirmedTime: '',
-        deliveredTime: '',
+        acceptedTime: null,
+        confirmedTime: null,
+        deliveredTime: null,
+        rejectedTime: null,
       });
       orderItem.order = order._id;
       await orderItem.save();
-      return order.populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      });
     } else {
       // if order item existed add up by item count from dto
       const existOrderItem = await this.orderItemModel.findOne({
@@ -90,16 +92,10 @@ export class OrderService {
         existOrder.items.push(orderItem._id);
         await existOrder.save();
       }
-
-      return existOrder.populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      });
     }
+    product.count -= dto.itemCount;
+    await product.save();
+    return product;
   }
 
   async toOrder(params: FindOneParams, dto: ToOrderDto) {
@@ -161,7 +157,6 @@ export class OrderService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
     const order = await this.orderModel.findOne({ _id: orderId });
 
     if (order && order.items.length === 1) {
@@ -171,6 +166,11 @@ export class OrderService {
         { _id: orderId },
         { $pull: { items: id } },
       );
+    }
+    const product = await this.productModel.findById(orderItem.product);
+    if (product) {
+      product.count += orderItem.itemCount;
+      await product.save();
     }
     return orderItem._id;
   }
@@ -199,14 +199,76 @@ export class OrderService {
     if (!dto.status) {
       throw new HttpException('Please type status', HttpStatus.FORBIDDEN);
     }
-    if (dto.status === EOrderStatus.ORDERED) {
+    if (
+      dto.status === EOrderStatus.ORDERED &&
+      order.status !== EOrderStatus.ORDERED
+    ) {
       order.acceptedTime = null;
       order.deliveredTime = null;
-    } else if (dto.status === EOrderStatus.ACCEPTED) {
+      order.rejectedTime = null;
+
+      if (dto.items && order.status === EOrderStatus.REJECTED) {
+        for (const item of dto.items) {
+          const productId = item.product._id;
+          const product = await this.productModel.findById(productId);
+
+          if (product) {
+            product.count -= item.itemCount;
+            await product.save();
+          }
+        }
+      }
+    } else if (
+      dto.status === EOrderStatus.ACCEPTED &&
+      order.status !== EOrderStatus.ACCEPTED
+    ) {
       order.acceptedTime = currentDate;
       order.deliveredTime = null;
-    } else if (dto.status === EOrderStatus.DELIVERED) {
+      order.rejectedTime = null;
+
+      if (dto.items && order.status === EOrderStatus.REJECTED) {
+        for (const item of dto.items) {
+          const productId = item.product._id;
+          const product = await this.productModel.findById(productId);
+
+          if (product) {
+            product.count -= item.itemCount;
+            await product.save();
+          }
+        }
+      }
+    } else if (
+      dto.status === EOrderStatus.DELIVERED &&
+      order.status !== EOrderStatus.DELIVERED
+    ) {
       order.deliveredTime = currentDate;
+      order.rejectedTime = null;
+
+      if (dto.items && order.status === EOrderStatus.REJECTED) {
+        for (const item of dto.items) {
+          const productId = item.product._id;
+          const product = await this.productModel.findById(productId);
+
+          if (product) {
+            product.count -= item.itemCount;
+            await product.save();
+          }
+        }
+      }
+    } else if (dto.status === EOrderStatus.REJECTED) {
+      order.rejectedTime = currentDate;
+
+      if (dto.items && order.status !== EOrderStatus.REJECTED) {
+        for (const item of dto.items) {
+          const productId = item.product._id;
+          const product = await this.productModel.findById(productId);
+
+          if (product) {
+            product.count += item.itemCount;
+            await product.save();
+          }
+        }
+      }
     }
     order.status = dto.status;
     await order.save();
@@ -238,7 +300,9 @@ export class OrderService {
     skip?: number,
   ): Promise<TReturnItem<Order[]>> {
     const query: any = this.orderModel
-      .find({ status: EOrderStatus.DELIVERED })
+      .find({
+        status: { $in: [EOrderStatus.DELIVERED, EOrderStatus.REJECTED] },
+      })
       .sort({ _id: -1 })
       .populate({
         path: 'items',
@@ -251,7 +315,7 @@ export class OrderService {
       .populate('author');
 
     const totalItemsQuery: any = this.orderModel.find({
-      status: EOrderStatus.DELIVERED,
+      status: { $in: [EOrderStatus.DELIVERED, EOrderStatus.REJECTED] },
     });
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
@@ -309,7 +373,13 @@ export class OrderService {
   async getAll(limit?: number, skip?: number): Promise<TReturnItem<Order[]>> {
     const query = this.orderModel
       .find({
-        status: { $nin: [EOrderStatus.IN_PROGRESS, EOrderStatus.DELIVERED] },
+        status: {
+          $nin: [
+            EOrderStatus.IN_PROGRESS,
+            EOrderStatus.DELIVERED,
+            EOrderStatus.REJECTED,
+          ],
+        },
       })
       .sort({ _id: -1 })
       .populate({

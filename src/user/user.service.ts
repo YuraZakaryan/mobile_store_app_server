@@ -45,7 +45,8 @@ export class UserService {
     const query = this.userModel.find().sort({ _id: -1 });
     if (confirmed !== undefined) {
       query.where('confirmed').equals(confirmed);
-    } else if (banned !== undefined) {
+    }
+    if (banned !== undefined) {
       query.where('banned').equals(banned);
     }
 
@@ -53,8 +54,9 @@ export class UserService {
 
     if (confirmed !== undefined) {
       totalItemsQuery.where('confirmed').equals(confirmed);
-    } else if (banned !== undefined) {
-      totalItemsQuery.where('banned').equals(confirmed);
+    }
+    if (banned !== undefined) {
+      totalItemsQuery.where('banned').equals(banned);
     }
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
