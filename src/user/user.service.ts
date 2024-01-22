@@ -9,12 +9,17 @@ import { TReturnItem } from './types';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import * as bcrypt from 'bcryptjs';
-import { EXPIRE_TIME_REFRESH } from 'src/constants';
+import { EXPIRE_TIME_REFRESH, MAILER_USER } from 'src/constants';
+import { MailerService } from '@nestjs-modules/mailer';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { ConfirmOtpDto } from './dto/confirm-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
+    private mailerService: MailerService,
     private jwtService: JwtService,
   ) {}
 
@@ -124,6 +129,7 @@ export class UserService {
         firstname: dto.firstname,
         lastname: dto.lastname,
         username: dto.username,
+        mail: dto.mail,
         phone: dto.phone,
         address: dto.address,
         confirmed: dto.confirmed,
@@ -190,5 +196,132 @@ export class UserService {
         message: 'User password is changed successfully !',
       };
     }
+  }
+
+  async sendOtpToMail(dto: SendOtpDto) {
+    try {
+      const user = await this.userModel.findOne({ mail: dto.mail });
+
+      if (!user) {
+        throw new HttpException(
+          'User with this mail not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const updater = this.otpUpdater();
+      user.otp_password_reset = updater.otp;
+      user.expiresOtpIn = updater.expiresOtpIn;
+
+      const saved = await user.save();
+
+      const otp: number = user.otp_password_reset;
+      const storeName: string = 'MOBIART';
+      const from: string = MAILER_USER;
+      const to: string = dto.mail;
+      const subject: string = 'OTP կոդ, գաղտնաբառը վերականգնելու համար';
+      const html: string = `
+    <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
+      <div style="margin: 50px auto; width: 70%; padding: 20px 0">
+        <div style="border-bottom: 1px solid #eee">
+          <a href="" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600">${storeName}</a>
+        </div>
+        <p style="font-size: 1.1em">Ողջու՝յն,</p>
+        <p>Օգտագործիր այս OTP կոդը, գաղտնաբառի վերականգման համար։ Հիշեցնենք որ մեկ անգամյա գաղտնաբառը գործում է 5 րոպե։</p>
+        <h2 style="background: #00466a; margin: 0 auto; width: max-content; padding: 0 10px; color: #fff; border-radius: 4px;">${otp}</h2>
+        <p style="font-size: 0.9em;">Regards,<br />${storeName}</p>
+        <hr style="border: none; border-top: 1px solid #eee" />
+        <div style="float: right; padding: 8px 0; color: #aaa; font-size: 0.8em; line-height: 1; font-weight: 300">
+          <p>${storeName} Inc</p>
+          <p>Armenia</p>
+        </div>
+      </div>
+    </div>
+  `;
+      if (saved) {
+        const sendMessage = this.mailerService.sendMail({
+          to,
+          from,
+          subject,
+          html,
+        });
+
+        if (!sendMessage) {
+          throw new HttpException(
+            'Error while sending opt code to mail',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        return {
+          message: `OTP ${otp} successfully sent to mail ${to}`,
+          mail: to,
+        };
+      }
+    } catch (error) {
+      console.error('Error in sendOtpToMail:', error);
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async confirmOtp(dto: ConfirmOtpDto) {
+    const user = await this.userModel.findOne({ mail: dto.mail });
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+    const expiresOtpIn: number = user.expiresOtpIn;
+    const now: number = new Date().getTime();
+
+    if (now > expiresOtpIn) {
+      throw new HttpException(
+        'One-Time Password has expired. Please request a new OTP.',
+        HttpStatus.GONE,
+      );
+    }
+    if (Number(dto.otp) !== user.otp_password_reset) {
+      throw new HttpException(
+        'One-Time Password is wrong!',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return {
+      message: 'Otp is successfully confirmed',
+      mail: user.mail,
+      otp: user.otp_password_reset,
+    };
+  }
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userModel.findOne({ mail: dto.mail });
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+    if (Number(dto.otp) !== user.otp_password_reset) {
+      throw new HttpException(
+        'One-Time Password is wrong!',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    const updatedUser = await user.save();
+    if (updatedUser) {
+      return {
+        message: 'User password is changed successfully',
+      };
+    }
+  }
+  otpUpdater() {
+    const otp: number = Math.floor(1000 + Math.random() * 9000);
+    const second: number = 1000;
+    const expiresOtpIn: number = new Date().setTime(
+      new Date().getTime() + second * 1000,
+    );
+    return {
+      otp,
+      expiresOtpIn,
+    };
   }
 }

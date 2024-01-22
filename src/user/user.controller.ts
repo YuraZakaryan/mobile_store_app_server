@@ -5,6 +5,7 @@ import {
   Get,
   HttpStatus,
   Param,
+  Post,
   Put,
   Query,
   UseGuards,
@@ -30,6 +31,10 @@ import { FindOneParams } from '../types';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Types } from 'mongoose';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { ConfirmOtpDto } from './dto/confirm-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { MAILER_PASSWORD, MAILER_USER, PRIVATE_KEY_ACCESS } from '../constants';
 
 @ApiTags('User')
 @Controller('user')
@@ -164,6 +169,54 @@ export class UserController {
   @Put('ban/:id')
   async toggleBan(@Param() params: FindOneParams) {
     return this.userService.toggleBan(params);
+  }
+  @UsePipes(ValidationPipe)
+  @ApiOperation({ summary: 'Send OTP to mail' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OTP {{code}} successfully sent to mail {{mail}}',
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Error while sending opt code to mail',
+  })
+  @Put('mail/otp')
+  sendOtpToMail(@Body() dto: SendOtpDto) {
+    return this.userService.sendOtpToMail(dto);
+  }
+  @UsePipes(ValidationPipe)
+  @ApiOperation({ summary: 'Confirm OTP' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OTP successfully confirmed',
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description:
+      'One-Time Password has expired. Please request a new OTP / One-Time Password is wrong!',
+  })
+  @Post('confirm/otp')
+  confirmOtp(@Body() dto: ConfirmOtpDto) {
+    return this.userService.confirmOtp(dto);
+  }
+  @UsePipes(ValidationPipe)
+  @ApiOperation({ summary: 'Reset password of user' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User password is changed successfully !',
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Users not found' })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'User is not auth!',
+  })
+  @ApiConsumes('application/json')
+  @ApiProduces('application/json')
+  @Put('reset/password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.userService.resetPassword(dto);
   }
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR, UserRole.ADMIN)

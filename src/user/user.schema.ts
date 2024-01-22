@@ -13,6 +13,9 @@ export class User {
   lastname: string;
 
   @Prop()
+  mail: string;
+
+  @Prop()
   username: string;
 
   @Prop()
@@ -40,6 +43,12 @@ export class User {
 
   @Prop({ default: false })
   banned: boolean;
+
+  @Prop()
+  otp_password_reset: number | null;
+
+  @Prop()
+  expiresOtpIn: number | null;
 
   @Prop()
   refreshToken: string;

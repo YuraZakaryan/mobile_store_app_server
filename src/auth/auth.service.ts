@@ -67,10 +67,7 @@ export class AuthService {
 
   async updateRefreshToken(dto: { refresh_token: string }) {
     try {
-      const { username, ...res } = await this.jwtService.verify(
-        dto.refresh_token,
-      );
-      console.log(res);
+      const { username } = await this.jwtService.verify(dto.refresh_token);
       const user = await this.userService.findUserByUsername(username);
       if (!user) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);

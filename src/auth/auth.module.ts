@@ -6,7 +6,10 @@ import { User, UserSchema } from '../user/user.schema';
 import { UserService } from '../user/user.service';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { EXPIRE_TIME_ACCESS, PRIVATE_KEY_ACCESS } from '../constants';
+import { EXPIRE_TIME_ACCESS } from '../constants';
+import * as process from 'process';
+
+const PRIVATE_KEY_ACCESS: string = process.env.PRIVATE_KEY_ACCESS;
 
 @Module({
   imports: [

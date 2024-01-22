@@ -93,7 +93,7 @@ export class OrderService {
         await existOrder.save();
       }
     }
-    product.count -= dto.itemCount;
+    product.count = Math.max(product.count - dto.itemCount, 0);
     await product.save();
     return product;
   }
@@ -105,18 +105,30 @@ export class OrderService {
     if (!order) {
       throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
     }
-    const currentDate: Date = new Date();
-    const isoString: string = currentDate.toISOString();
-
-    const updateOrder = await this.orderModel.findByIdAndUpdate(orderId, {
-      packaging: dto.packaging,
-      necessaryNotes: dto.necessaryNotes,
-      status: EOrderStatus.ORDERED,
-      confirmedTime: isoString,
-    });
 
     for (const item of dto.items) {
       if (item.inProgress) {
+        const product = await this.productModel.findById(item.product);
+        const orderItem = await this.orderItemModel.findById(item._id).lean();
+        const oldItemCount: number = orderItem.itemCount;
+
+        if (item.itemCount - oldItemCount > product.count) {
+          throw new HttpException(
+            'Not enough quantity in stock',
+            HttpStatus.BAD_GATEWAY,
+          );
+        }
+        if (oldItemCount < item.itemCount) {
+          product.count = Math.max(
+            0,
+            product.count - (item.itemCount - oldItemCount),
+          );
+
+          await product.save();
+        } else if (oldItemCount > item.itemCount) {
+          product.count += oldItemCount - item.itemCount;
+          await product.save();
+        }
         await this.orderItemModel.findOneAndUpdate(
           {
             _id: item._id,
@@ -127,6 +139,16 @@ export class OrderService {
         );
       }
     }
+
+    const currentDate: Date = new Date();
+    const isoString: string = currentDate.toISOString();
+
+    const updateOrder = await this.orderModel.findByIdAndUpdate(orderId, {
+      packaging: dto.packaging,
+      necessaryNotes: dto.necessaryNotes,
+      status: EOrderStatus.ORDERED,
+      confirmedTime: isoString,
+    });
 
     if (updateOrder) {
       await this.orderItemModel.updateMany(
@@ -213,7 +235,7 @@ export class OrderService {
           const product = await this.productModel.findById(productId);
 
           if (product) {
-            product.count -= item.itemCount;
+            product.count = Math.max(product.count - item.itemCount, 0);
             await product.save();
           }
         }
@@ -232,7 +254,7 @@ export class OrderService {
           const product = await this.productModel.findById(productId);
 
           if (product) {
-            product.count -= item.itemCount;
+            product.count = Math.max(product.count - item.itemCount, 0);
             await product.save();
           }
         }
@@ -250,7 +272,7 @@ export class OrderService {
           const product = await this.productModel.findById(productId);
 
           if (product) {
-            product.count -= item.itemCount;
+            product.count = Math.max(product.count - item.itemCount, 0);
             await product.save();
           }
         }
@@ -393,7 +415,13 @@ export class OrderService {
       .populate('author');
 
     const totalItemsQuery = this.orderModel.find({
-      status: { $nin: [EOrderStatus.IN_PROGRESS, EOrderStatus.DELIVERED] },
+      status: {
+        $nin: [
+          EOrderStatus.IN_PROGRESS,
+          EOrderStatus.DELIVERED,
+          EOrderStatus.REJECTED,
+        ],
+      },
     });
 
     const totalItems = await totalItemsQuery.countDocuments().exec();

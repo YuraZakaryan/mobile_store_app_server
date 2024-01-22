@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsNotEmpty,
   IsString,
@@ -30,6 +31,11 @@ export class UpdateUserDto {
   @IsString({ message: 'username must be a string' })
   @IsNotEmpty({ message: 'username is required' })
   readonly username: string;
+
+  @ApiProperty({ example: 'John.Curry1@gmail.com', description: 'mail' })
+  @IsEmail({}, { message: 'Invalid email format' })
+  @IsNotEmpty({ message: 'is required' })
+  readonly mail: string;
 
   @ApiProperty({
     example: 'Yerevan, Aram Khachatryan 14',
