@@ -3,7 +3,7 @@ import { IGenerateTokenPayload } from '../types';
 
 const NODE_ENV: string = `.${process.env.NODE_ENV}.env`;
 const PRIVATE_KEY_REFRESH: string = process.env.PRIVATE_KEY_REFRESH;
-const EXPIRE_TIME_ACCESS: number = 86400; // seconds 86400
+const EXPIRE_TIME_ACCESS: number = 259200; // 3 day
 const EXPIRE_TIME_REFRESH: number = 7; // day
 
 const MAILER_USER: string = 'mobiartstore@gmail.com';

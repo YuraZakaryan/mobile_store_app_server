@@ -34,7 +34,6 @@ import { Types } from 'mongoose';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { ConfirmOtpDto } from './dto/confirm-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { MAILER_PASSWORD, MAILER_USER, PRIVATE_KEY_ACCESS } from '../constants';
 
 @ApiTags('User')
 @Controller('user')
