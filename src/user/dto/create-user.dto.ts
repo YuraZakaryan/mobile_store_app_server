@@ -33,8 +33,6 @@ export class CreateUserDto {
   readonly username: string;
 
   @ApiProperty({ example: 'John.Curry1@gmail.com', description: 'mail' })
-  @IsEmail({}, { message: 'Invalid email format' })
-  @IsNotEmpty({ message: 'is required' })
   readonly mail: string;
 
   @ApiProperty({

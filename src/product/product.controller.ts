@@ -33,7 +33,6 @@ import { Product } from './product.schema';
 import { CreateProductWithPictureDto } from './dto/create-product-with-picture.dto';
 import { FindOneParams } from '../types';
 import { TReturnItem } from '../user/types';
-import { Category } from '../category/category.schema';
 import { Types } from 'mongoose';
 
 @ApiTags('Product')

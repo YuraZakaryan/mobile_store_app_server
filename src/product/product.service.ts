@@ -44,6 +44,7 @@ export class ProductService {
     const product = await this.productModel.create({
       ...dto,
       picture: picturePath,
+      discount: dto.discount ? dto.discount : 0,
     });
     category.products.push(product._id);
     await category.save();
@@ -77,7 +78,9 @@ export class ProductService {
       information: dto.information,
       price: Math.max(parseFloat(String(dto.price)), 0),
       code: dto.code,
-      discount: Math.max(parseFloat(String(dto.discount)), 0),
+      discount: dto.discount
+        ? Math.max(parseFloat(String(dto.discount)), 0)
+        : 0,
       count: Math.max(parseFloat(String(dto.count)), 0),
       category: dto.category,
       author: dto.author,
