@@ -19,7 +19,7 @@ import * as path from 'path';
     ServeStaticModule.forRoot({
       rootPath: path.resolve(__dirname, '..', 'static'),
     }),
-    MongooseModule.forRoot('mongodb://mongodb/mobiart'),
+    MongooseModule.forRoot('mongodb://localhost:27017/mobiart'),
     UserModule,
     AuthModule,
     CategoryModule,
