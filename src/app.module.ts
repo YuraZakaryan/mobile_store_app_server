@@ -9,12 +9,12 @@ import { FileModule } from './file/file.module';
 import { ProductModule } from './product/product.module';
 import { OrderModule } from './order/order.module';
 import * as path from 'path';
+import { NODE_ENV } from './constants';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      // envFilePath: NODE_ENV,
-      envFilePath: '.production.env',
+      envFilePath: NODE_ENV,
     }),
     ServeStaticModule.forRoot({
       rootPath: path.resolve(__dirname, '..', 'static'),
