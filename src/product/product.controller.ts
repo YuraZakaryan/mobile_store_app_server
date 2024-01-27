@@ -34,6 +34,7 @@ import { CreateProductWithPictureDto } from './dto/create-product-with-picture.d
 import { FindOneParams } from '../types';
 import { TReturnItem } from '../user/types';
 import { Types } from 'mongoose';
+import { Order } from '../order/schema/order.schema';
 
 @ApiTags('Product')
 @Controller('product')
@@ -152,6 +153,19 @@ export class ProductController {
     @Query('discount') discount?: boolean,
   ): Promise<TReturnItem<Product[]>> {
     return this.productService.getAll(limit, skip, category, discount);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get product' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Product not found',
+  })
+  @ApiParam({ name: 'id' })
+  @Get(':id')
+  getOne(@Param() params: FindOneParams): Promise<Product> {
+    return this.productService.getOne(params);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

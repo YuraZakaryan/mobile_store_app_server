@@ -28,9 +28,7 @@ export class OrderService {
     });
 
     // Find product, when it doesn't exist, show error
-    const product = await this.productModel
-      .findById(dto.product)
-      .populate('author');
+    const product = await this.productModel.findById(dto.product);
     if (!product) {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }

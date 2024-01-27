@@ -1,20 +1,11 @@
-import {
-  BadRequestException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-} from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Product } from './product.schema';
 import { Model, Types } from 'mongoose';
 import { FileService, FileType } from '../file/file.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Category } from '../category/category.schema';
-import {
-  FindOneParams,
-  TCategoryUpdateData,
-  TProductUpdateData,
-} from '../types';
+import { FindOneParams, TProductUpdateData } from '../types';
 import { TReturnItem } from '../user/types';
 
 @Injectable()
@@ -221,5 +212,16 @@ export class ProductService {
     );
 
     return product._id;
+  }
+
+  async getOne(params: FindOneParams): Promise<Product> {
+    const id = params.id;
+
+    const product = await this.productModel.findById(id);
+    if (!product) {
+      throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+    }
+    console.log(product);
+    return product;
   }
 }
