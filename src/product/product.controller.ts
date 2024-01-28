@@ -155,7 +155,6 @@ export class ProductController {
     return this.productService.getAll(limit, skip, category, discount);
   }
 
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get product' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
   @ApiResponse({
