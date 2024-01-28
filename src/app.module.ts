@@ -14,7 +14,7 @@ import { NODE_ENV } from './constants';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: NODE_ENV,
+      envFilePath: '.development.env',
     }),
     ServeStaticModule.forRoot({
       rootPath: path.resolve(__dirname, '..', 'static'),
