@@ -9,7 +9,7 @@ import { FileModule } from './file/file.module';
 import { ProductModule } from './product/product.module';
 import { OrderModule } from './order/order.module';
 import * as path from 'path';
-import { NODE_ENV } from './constants';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -27,5 +27,6 @@ import { NODE_ENV } from './constants';
     ProductModule,
     OrderModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
