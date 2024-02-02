@@ -12,7 +12,7 @@ export class UpdatePasswordDto {
   @IsNotEmpty({ message: 'New password is required' })
   @Length(8, 24, { message: 'length should be between 8 and 24 characters' })
   @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/,
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.])[A-Za-z\d@$!%*?&.]+$/,
     { message: 'New password must meet complexity requirements' },
   )
   @IsNotEmpty({ message: 'New password is required' })

@@ -1,12 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsEmail,
-  IsEnum,
-  IsNotEmpty,
-  IsString,
-  Length,
-} from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsString, Length } from 'class-validator';
 
 export enum ERole {
   ADMIN = 'ADMIN',
@@ -33,6 +26,8 @@ export class UpdateUserDto {
   readonly username: string;
 
   @ApiProperty({ example: 'John.Curry1@gmail.com', description: 'mail' })
+  @IsEmail({}, { message: 'Invalid email format' })
+  @IsNotEmpty({ message: 'mail is required' })
   readonly mail: string;
 
   @ApiProperty({

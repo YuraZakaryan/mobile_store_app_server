@@ -33,6 +33,8 @@ export class CreateUserDto {
   readonly username: string;
 
   @ApiProperty({ example: 'John.Curry1@gmail.com', description: 'mail' })
+  @IsEmail({}, { message: 'Invalid email format' })
+  @IsNotEmpty({ message: 'is required' })
   readonly mail: string;
 
   @ApiProperty({
@@ -49,7 +51,7 @@ export class CreateUserDto {
     message: 'password length should be between 8 and 24 characters',
   })
   @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/,
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.])[A-Za-z\d@$!%*?&.]+$/,
     { message: 'password must meet complexity requirements' },
   )
   @IsNotEmpty({ message: 'password is required' })
