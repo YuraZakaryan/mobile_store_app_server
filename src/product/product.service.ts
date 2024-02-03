@@ -149,30 +149,29 @@ export class ProductService {
   }
 
   async getAll(
+    title?: string,
     limit?: number,
     skip?: number,
     category?: Types.ObjectId,
     discount?: boolean,
   ): Promise<TReturnItem<Product[]>> {
-    const query = this.productModel
-      .find({
-        ...(category ? { category } : {}),
-        ...(discount !== undefined
-          ? discount
-            ? { discount: { $ne: 0 } }
-            : {}
-          : {}),
-      })
-      .sort({ _id: -1 });
+    const queryConditions: any = {};
 
-    const totalItemsQuery = this.productModel.find({
-      ...(category ? { category } : {}),
-      ...(discount !== undefined
-        ? discount
-          ? { discount: { $ne: 0 } }
-          : {}
-        : {}),
-    });
+    if (category) {
+      queryConditions.category = category;
+    }
+
+    if (discount !== undefined) {
+      queryConditions.discount = discount ? { $ne: 0 } : {};
+    }
+
+    if (title !== undefined) {
+      queryConditions.title = { $regex: new RegExp(title, 'i') };
+    }
+
+    const query = this.productModel.find(queryConditions).sort({ _id: -1 });
+
+    const totalItemsQuery = this.productModel.find(queryConditions);
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
 
@@ -221,7 +220,6 @@ export class ProductService {
     if (!product) {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
-    console.log(product);
     return product;
   }
 }

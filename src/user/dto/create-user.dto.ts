@@ -16,7 +16,7 @@ export enum ERole {
 
 export class CreateUserDto {
   @ApiProperty({ example: 'Edvard', description: 'name' })
-  @IsString({ message: 'must be a string' })
+  @IsString({ message: 'firstname must be a string' })
   @IsNotEmpty({ message: 'firstname is required' })
   readonly firstname: string;
 
@@ -34,7 +34,7 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 'John.Curry1@gmail.com', description: 'mail' })
   @IsEmail({}, { message: 'Invalid email format' })
-  @IsNotEmpty({ message: 'is required' })
+  @IsNotEmpty({ message: 'mail is required' })
   readonly mail: string;
 
   @ApiProperty({

@@ -74,15 +74,22 @@ export class CategoryService {
   }
 
   async getAll(
+    title?: string,
     limit?: number,
     skip?: number,
   ): Promise<TReturnItem<Category[]>> {
+    const queryConditions: any = {};
+
+    if (title !== undefined) {
+      queryConditions.title = { $regex: new RegExp(title, 'i') };
+    }
+
     const query = this.categoryModel
-      .find()
+      .find(queryConditions)
       .populate('products')
       .sort({ _id: -1 });
 
-    const totalItemsQuery = this.categoryModel.find();
+    const totalItemsQuery = this.categoryModel.find(queryConditions);
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
 

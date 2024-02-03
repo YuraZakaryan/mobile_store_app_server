@@ -102,6 +102,10 @@ export class CategoryController {
     description: 'Categories not found',
   })
   @ApiQuery({
+    name: 'title',
+    required: false,
+  })
+  @ApiQuery({
     name: 'limit',
     required: false,
   })
@@ -111,10 +115,11 @@ export class CategoryController {
   })
   @Get('all')
   getAll(
+    @Query('title') title?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
   ): Promise<TReturnItem<Category[]>> {
-    return this.categoryService.getAll(limit, skip);
+    return this.categoryService.getAll(title, limit, skip);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

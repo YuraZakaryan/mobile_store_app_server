@@ -134,6 +134,10 @@ export class OrderController {
     description: 'Orders not found',
   })
   @ApiQuery({
+    name: 'name',
+    required: false,
+  })
+  @ApiQuery({
     name: 'limit',
     required: false,
   })
@@ -143,10 +147,11 @@ export class OrderController {
   })
   @Get('history')
   getDeliveredOrders(
+    @Query('name') name?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
   ): Promise<TReturnItem<Order[]>> {
-    return this.orderService.getDeliveredOrders(limit, skip);
+    return this.orderService.getDeliveredOrders(name, limit, skip);
   }
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get orders by author' })
@@ -182,6 +187,10 @@ export class OrderController {
     description: 'Orders not found',
   })
   @ApiQuery({
+    name: 'name',
+    required: false,
+  })
+  @ApiQuery({
     name: 'limit',
     required: false,
   })
@@ -191,9 +200,10 @@ export class OrderController {
   })
   @Get('all')
   getAll(
+    @Query('name') name?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
   ): Promise<TReturnItem<Order[]>> {
-    return this.orderService.getAll(limit, skip);
+    return this.orderService.getAll(name, limit, skip);
   }
 }

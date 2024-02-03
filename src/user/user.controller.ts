@@ -60,6 +60,10 @@ export class UserController {
     description: 'Access denied',
   })
   @ApiQuery({
+    name: 'name',
+    required: false,
+  })
+  @ApiQuery({
     name: 'limit',
     required: false,
   })
@@ -77,12 +81,13 @@ export class UserController {
   })
   @Get('all')
   async getAll(
+    @Query('name') name?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
     @Query('confirmed') confirmed?: boolean,
     @Query('banned') banned?: boolean,
   ): Promise<TReturnItem<User[]>> {
-    return this.userService.getAll(limit, skip, confirmed, banned);
+    return this.userService.getAll(name, limit, skip, confirmed, banned);
   }
 
   @UseGuards(JwtAuthGuard)

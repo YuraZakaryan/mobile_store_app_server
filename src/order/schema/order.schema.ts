@@ -43,6 +43,9 @@ export class Order {
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'OrderItem' }] })
   items: Types.ObjectId[];
 
+  @Prop()
+  authorName: string;
+
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   author: Types.ObjectId;
 }

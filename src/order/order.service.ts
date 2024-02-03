@@ -57,6 +57,7 @@ export class OrderService {
       // Create order when it doesn't exist
       const order = await this.orderModel.create({
         author: dto.author,
+        authorName: user.firstname,
         status: EOrderStatus.IN_PROGRESS,
         necessaryNotes: '',
         packaging: EPackage.BAG,
@@ -316,11 +317,19 @@ export class OrderService {
   }
 
   async getDeliveredOrders(
+    name?: string,
     limit?: number,
     skip?: number,
   ): Promise<TReturnItem<Order[]>> {
+    const queryConditions: any = {};
+
+    if (name !== undefined) {
+      queryConditions.authorName = { $regex: new RegExp(name, 'i') };
+    }
+
     const query: any = this.orderModel
       .find({
+        ...queryConditions,
         status: { $in: [EOrderStatus.DELIVERED, EOrderStatus.REJECTED] },
       })
       .sort({ _id: -1 })
@@ -335,6 +344,7 @@ export class OrderService {
       .populate('author');
 
     const totalItemsQuery: any = this.orderModel.find({
+      ...queryConditions,
       status: { $in: [EOrderStatus.DELIVERED, EOrderStatus.REJECTED] },
     });
 
@@ -390,9 +400,20 @@ export class OrderService {
     };
   }
 
-  async getAll(limit?: number, skip?: number): Promise<TReturnItem<Order[]>> {
+  async getAll(
+    name?: string,
+    limit?: number,
+    skip?: number,
+  ): Promise<TReturnItem<Order[]>> {
+    const queryConditions: any = {};
+
+    if (name !== undefined) {
+      queryConditions.authorName = { $regex: new RegExp(name, 'i') };
+    }
+
     const query = this.orderModel
       .find({
+        ...queryConditions,
         status: {
           $nin: [
             EOrderStatus.IN_PROGRESS,
@@ -413,6 +434,7 @@ export class OrderService {
       .populate('author');
 
     const totalItemsQuery = this.orderModel.find({
+      ...queryConditions,
       status: {
         $nin: [
           EOrderStatus.IN_PROGRESS,
@@ -426,9 +448,10 @@ export class OrderService {
 
     const orders = await query.limit(limit).skip(skip).exec();
 
-    if (!orders && orders.length === 0) {
+    if (!orders || orders.length === 0) {
       throw new HttpException('Orders not found', HttpStatus.NOT_FOUND);
     }
+
     return {
       total_items: totalItems,
       items: orders,

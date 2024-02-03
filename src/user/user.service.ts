@@ -42,12 +42,20 @@ export class UserService {
   }
 
   async getAll(
+    name?: string,
     limit?: number,
     skip?: number,
     confirmed?: boolean,
     banned?: boolean,
   ): Promise<TReturnItem<User[]>> {
-    const query = this.userModel.find().sort({ _id: -1 });
+    const queryConditions: any = {};
+
+    if (name !== undefined) {
+      queryConditions.firstname = { $regex: new RegExp(name, 'i') };
+    }
+
+    const query = this.userModel.find(queryConditions).sort({ _id: -1 });
+
     if (confirmed !== undefined) {
       query.where('confirmed').equals(confirmed);
     }
@@ -55,7 +63,7 @@ export class UserService {
       query.where('banned').equals(banned);
     }
 
-    const totalItemsQuery = this.userModel.find();
+    const totalItemsQuery = this.userModel.find(queryConditions);
 
     if (confirmed !== undefined) {
       totalItemsQuery.where('confirmed').equals(confirmed);
