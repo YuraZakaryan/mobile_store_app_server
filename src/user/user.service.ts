@@ -41,6 +41,10 @@ export class UserService {
     return this.userModel.findOne({ username });
   }
 
+  async findUserByMail(mail: string): Promise<User> {
+    return this.userModel.findOne({ mail });
+  }
+
   async getAll(
     name?: string,
     limit?: number,
@@ -129,9 +133,28 @@ export class UserService {
     return this.userModel.findById(_id);
   }
 
-  update(params: FindOneParams, dto: UpdateUserDto): Promise<User> {
+  async update(params: FindOneParams, dto: UpdateUserDto): Promise<User> {
     const id = params.id;
-    const user = this.userModel.findByIdAndUpdate(
+
+    const currentUser = await this.userModel.findById(id);
+
+    const existingUserByUsername = await this.findUserByUsername(dto.username);
+    if (existingUserByUsername && currentUser.username !== dto.username) {
+      throw new HttpException(
+        'User with this username already exists!',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const existingUserByMail = await this.findUserByMail(dto.mail);
+    if (existingUserByMail && currentUser.mail !== dto.mail) {
+      throw new HttpException(
+        'User with this mail already exists!',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const user = await this.userModel.findByIdAndUpdate(
       id,
       {
         firstname: dto.firstname,
