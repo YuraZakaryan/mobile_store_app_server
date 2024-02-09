@@ -10,6 +10,7 @@ import { ChangeOrderStatusDto } from './dto/change-order-status.dto';
 import { ToOrderDto } from './dto/to-order.dto';
 import { TReturnItem } from '../user/types';
 import { User } from '../user/user.schema';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class OrderService {
@@ -18,6 +19,7 @@ export class OrderService {
     @InjectModel(OrderItem.name) private orderItemModel: Model<OrderItem>,
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(User.name) private userModel: Model<User>,
+    private userService: UserService,
   ) {}
 
   async createOrAdd(dto: CreateOrderDto) {
@@ -220,6 +222,7 @@ export class OrderService {
     if (!dto.status) {
       throw new HttpException('Please type status', HttpStatus.FORBIDDEN);
     }
+
     if (
       dto.status === EOrderStatus.ORDERED &&
       order.status !== EOrderStatus.ORDERED
@@ -246,6 +249,8 @@ export class OrderService {
       order.acceptedTime = currentDate;
       order.deliveredTime = null;
       order.rejectedTime = null;
+
+      await order.save();
 
       if (dto.items && order.status === EOrderStatus.REJECTED) {
         for (const item of dto.items) {

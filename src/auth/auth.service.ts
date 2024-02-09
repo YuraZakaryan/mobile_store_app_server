@@ -5,11 +5,12 @@ import { User } from '../user/user.schema';
 import { Model } from 'mongoose';
 import { UserService } from '../user/user.service';
 import * as bcrypt from 'bcryptjs';
-import { CreateUserDto } from '../user/dto/create-user.dto';
+import { CreateUserDto, ERole } from '../user/dto/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
 import { payloadJwt } from '../constants';
 import { IGenerateTokenPayload, ReqUser } from '../types';
 import { MeDto } from './dto/me-dto';
+import { formatDate } from '../utils/date';
 
 @Injectable()
 export class AuthService {
@@ -28,9 +29,13 @@ export class AuthService {
     const user = await this.userService.findUserByUsername(dto.username);
     if (!user || !(await bcrypt.compare(dto.password, user.password))) {
       throw new HttpException(
-        'Login or Password is wrong!',
-        HttpStatus.BAD_REQUEST,
+        'invalid_login_credentials',
+        HttpStatus.UNAUTHORIZED,
       );
+    } else if (!user.confirmed) {
+      throw new HttpException('account_not_confirmed', HttpStatus.FORBIDDEN);
+    } else if (user.banned) {
+      throw new HttpException('account_banned', HttpStatus.FORBIDDEN);
     }
     return user;
   }
@@ -41,17 +46,14 @@ export class AuthService {
     );
     if (existingUserByUsername) {
       throw new HttpException(
-        'User with this username already exists!',
+        'username_already_exists',
         HttpStatus.BAD_REQUEST,
       );
     }
 
     const existingUserByMail = await this.userService.findUserByMail(dto.mail);
     if (existingUserByMail) {
-      throw new HttpException(
-        'User with this mail already exists!',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new HttpException('mail_already_exists', HttpStatus.BAD_REQUEST);
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
@@ -59,6 +61,54 @@ export class AuthService {
       ...dto,
       password: hashedPassword,
     });
+    if (user && !dto.confirmed) {
+      const adminUsers = await this.userModel.find({
+        role: [ERole.ADMIN, ERole.MODERATOR],
+      });
+      const subject: string = `Նոր գրանցման հայտ (${dto.firstname} ${dto.lastname})`;
+      const storeName: string = 'MOBIART';
+      const currentTime: Date = new Date();
+
+      const html: string = `
+    <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
+      <div style="margin: 50px auto; width: 70%; padding: 20px 0">
+        <div style="border-bottom: 1px solid #eee">
+          <a href="" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600">${storeName}</a>
+        </div>
+        <div>
+            <p style="font-size: 1rem; font-weight: bold">Անուն։ <span style="font-weight: normal">${
+              dto.firstname
+            }</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Ազգանուն։ <span style="font-weight: normal">${
+              dto.lastname
+            }</span></p>
+              <p style="font-size: 1rem; font-weight: bold">Էլ փոստ: <span style="font-weight: normal">${
+                dto.mail
+              }</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Հասցե։ <span style="font-weight: normal">${
+              dto.address
+            }</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Հեռախոս։ <span style="font-weight: normal">${
+              dto.phone
+            }</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Հայտը ստեղծվել է։ <span style="font-weight: normal">${formatDate(
+              currentTime,
+            )}</span></p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee" />
+        <div style="float: right; padding: 8px 0; color: #aaa; font-size: 0.8em; line-height: 1; font-weight: 300">
+          <p>${storeName} Inc</p>
+          <p>Armenia</p>
+        </div>
+      </div>
+    </div>
+  `;
+      if (adminUsers && adminUsers.length > 0) {
+        for (const admin of adminUsers) {
+          await this.userService.sendToMail(admin.mail, html, subject);
+        }
+      }
+    }
     return await this.generateAuthTokens(user);
   }
 

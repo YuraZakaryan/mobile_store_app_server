@@ -6,6 +6,7 @@ import { Order, OrderSchema } from './schema/order.schema';
 import { OrderItem, OrderItemSchema } from './schema/order-item.schema';
 import { Product, ProductSchema } from '../product/product.schema';
 import { User, UserSchema } from '../user/user.schema';
+import { UserService } from '../user/user.service';
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { User, UserSchema } from '../user/user.schema';
     ]),
   ],
   controllers: [OrderController],
-  providers: [OrderService],
+  providers: [OrderService, UserService],
 })
 export class OrderModule {}

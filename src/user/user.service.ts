@@ -229,7 +229,30 @@ export class UserService {
     }
   }
 
-  async sendOtpToMail(dto: SendOtpDto) {
+  async sendToMail(to: string, html: string, subject: string): Promise<void> {
+    try {
+      const sendMessage = await this.mailerService.sendMail({
+        to,
+        from: MAILER_USER,
+        subject,
+        html,
+      });
+
+      if (!sendMessage) {
+        throw new HttpException(
+          'Error while sending email',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    } catch (error) {
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async sendOtpToMail(dto: SendOtpDto): Promise<any> {
     try {
       const user = await this.userModel.findOne({ mail: dto.mail });
 
@@ -248,8 +271,6 @@ export class UserService {
 
       const otp: number = user.otp_password_reset;
       const storeName: string = 'MOBIART';
-      const from: string = MAILER_USER;
-      const to: string = dto.mail;
       const subject: string = 'OTP կոդ, գաղտնաբառը վերականգնելու համար';
       const html: string = `
     <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
@@ -269,29 +290,16 @@ export class UserService {
       </div>
     </div>
   `;
-      if (saved) {
-        const sendMessage = this.mailerService.sendMail({
-          to,
-          from,
-          subject,
-          html,
-        });
 
-        if (!sendMessage) {
-          throw new HttpException(
-            'Error while sending opt code to mail',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
+      if (saved) {
+        await this.sendToMail(dto.mail, html, subject);
 
         return {
-          message: `OTP ${otp} successfully sent to mail ${to}`,
-          mail: to,
+          message: `OTP ${otp} successfully sent to mail ${dto.mail}`,
+          mail: dto.mail,
         };
       }
     } catch (error) {
-      console.error('Error in sendOtpToMail:', error);
-
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
