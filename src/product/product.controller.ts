@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -31,9 +32,10 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { ProductService } from './product.service';
 import { Product } from './product.schema';
 import { CreateProductWithPictureDto } from './dto/create-product-with-picture.dto';
-import { FindOneParams } from '../types';
+import { FindOneParams, ReqUser } from '../types';
 import { TReturnItem } from '../user/types';
 import { Types } from 'mongoose';
+import { CreateProductByDocumentDto } from './dto/create-product-by-document.dto';
 
 @ApiTags('Product')
 @Controller('product')
@@ -63,6 +65,19 @@ export class ProductController {
     @Body() dto: CreateProductDto,
   ): Promise<Product> {
     return this.productService.create(dto, picture);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('document'))
+  @ApiBody({ type: CreateProductByDocumentDto })
+  @Post('create/by-document')
+  createByDocument(
+    @UploadedFile() document: Express.Multer.File,
+    @Req() req: ReqUser,
+  ) {
+    return this.productService.createByDocument(document, req);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -148,6 +163,10 @@ export class ProductController {
     name: 'discount',
     required: false,
   })
+  @ApiQuery({
+    name: 'not-activated',
+    required: false,
+  })
   @Get('all')
   getAll(
     @Query('title') title?: string,
@@ -155,8 +174,16 @@ export class ProductController {
     @Query('skip') skip?: number,
     @Query('category') category?: Types.ObjectId,
     @Query('discount') discount?: boolean,
+    @Query('not-activated') notActivated?: boolean,
   ): Promise<TReturnItem<Product[]>> {
-    return this.productService.getAll(title, limit, skip, category, discount);
+    return this.productService.getAll(
+      title,
+      limit,
+      skip,
+      category,
+      discount,
+      notActivated,
+    );
   }
 
   @ApiOperation({ summary: 'Get product' })

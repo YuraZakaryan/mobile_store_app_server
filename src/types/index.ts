@@ -43,3 +43,8 @@ export interface IOrderItemExtended extends Omit<OrderItem, 'product'> {
 export interface IOrderExtended extends Omit<Order, 'author'> {
   author: User;
 }
+export type TProductByDocumentData = {
+  productCode: string;
+  productName: string;
+  quantity: number;
+};

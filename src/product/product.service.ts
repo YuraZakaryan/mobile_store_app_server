@@ -5,8 +5,14 @@ import { Model, Types } from 'mongoose';
 import { FileService, FileType } from '../file/file.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Category } from '../category/category.schema';
-import { FindOneParams, TProductUpdateData } from '../types';
+import {
+  FindOneParams,
+  ReqUser,
+  TProductByDocumentData,
+  TProductUpdateData,
+} from '../types';
 import { TReturnItem } from '../user/types';
+import * as xlsx from 'xlsx';
 
 @Injectable()
 export class ProductService {
@@ -28,10 +34,12 @@ export class ProductService {
     dto.count = Math.max(parseFloat(String(dto.count)), 0);
     dto.discount = Math.max(parseFloat(String(dto.discount)), 0);
 
-    const picturePath = await this.fileService.createFile(
-      FileType.IMAGE,
-      picture,
-    );
+    let picturePath: string | null = null;
+
+    if (picture) {
+      picturePath = await this.fileService.createFile(FileType.IMAGE, picture);
+    }
+
     const product = await this.productModel.create({
       ...dto,
       picture: picturePath,
@@ -41,6 +49,105 @@ export class ProductService {
     await category.save();
 
     return await product.populate('author');
+  }
+
+  async createByDocument(document: Express.Multer.File, req: ReqUser) {
+    try {
+      const id: Types.ObjectId = req.user.sub;
+
+      if (!document || !document.buffer) {
+        throw new HttpException('document_is_missing', HttpStatus.BAD_GATEWAY);
+      }
+
+      const workbook: xlsx.WorkBook = xlsx.read(document.buffer, {
+        type: 'buffer',
+      });
+
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new HttpException(
+          'workbook_does_not_contain_any_sheets',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const sheetName: string = workbook.SheetNames[0];
+      const sheet: xlsx.WorkSheet = workbook.Sheets[sheetName];
+
+      if (!sheet) {
+        throw new HttpException(
+          `sheet_${sheetName}'_not_found_in_the_workbook`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const data: TProductByDocumentData[] = xlsx.utils.sheet_to_json(sheet, {
+        header: ['productCode', 'productName', 'quantity'],
+      });
+
+      const firstThreeElements: TProductByDocumentData[] = data.slice(2);
+      firstThreeElements.pop();
+
+      const formattedProducts = firstThreeElements.map(
+        ({ productCode, productName, quantity }: TProductByDocumentData) => {
+          if (!productCode || !productName || !quantity) {
+            throw new HttpException(
+              'invalid_product_data',
+              HttpStatus.FORBIDDEN,
+            );
+          }
+
+          return {
+            title: productName,
+            code: productCode,
+            count: quantity,
+          };
+        },
+      );
+
+      const listOfCreatedProducts = {
+        items: [],
+        totalItems: 0,
+      };
+
+      for (const product of formattedProducts) {
+        const existProduct = await this.productModel.findOne({
+          title: product.title,
+        });
+
+        if (!existProduct) {
+          const newProduct = await this.productModel.create({
+            ...product,
+            information: '',
+            picture: null,
+            price: 0,
+            discount: 0,
+            category: null,
+            author: id,
+          });
+          listOfCreatedProducts.totalItems += 1;
+          listOfCreatedProducts.items.unshift(newProduct);
+        }
+      }
+
+      if (listOfCreatedProducts.totalItems === 0) {
+        throw new HttpException(
+          'there_are_no_product_for_import',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      return listOfCreatedProducts;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('is not a spreadsheet')
+      ) {
+        throw new HttpException(
+          'invalid_document_format',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
   }
 
   async update(
@@ -101,9 +208,10 @@ export class ProductService {
         new: true,
       },
     );
-
     if (
       updatedProduct &&
+      oldProduct.category !== null &&
+      oldProduct.category !== undefined &&
       dto.category.toString() !== oldProduct.category.toString()
     ) {
       await this.categoryModel.updateMany(
@@ -128,6 +236,7 @@ export class ProductService {
     const query = this.productModel
       .find({
         title: { $regex: new RegExp(title, 'i') },
+        price: { $ne: 0 },
       })
       .sort({ _id: -1 });
 
@@ -154,6 +263,7 @@ export class ProductService {
     skip?: number,
     category?: Types.ObjectId,
     discount?: boolean,
+    notActivated?: boolean,
   ): Promise<TReturnItem<Product[]>> {
     const queryConditions: any = {};
 
@@ -167,6 +277,12 @@ export class ProductService {
 
     if (title !== undefined) {
       queryConditions.title = { $regex: new RegExp(title, 'i') };
+    }
+
+    if (notActivated !== undefined) {
+      queryConditions.price = 0;
+    } else {
+      queryConditions.price = { $ne: 0 };
     }
 
     const query = this.productModel.find(queryConditions).sort({ _id: -1 });

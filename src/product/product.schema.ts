@@ -13,7 +13,7 @@ export class Product {
   information: string;
 
   @Prop()
-  picture: string;
+  picture: string | null;
 
   @Prop()
   price: number;
@@ -28,7 +28,7 @@ export class Product {
   count: number;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Category' })
-  category: Types.ObjectId;
+  category: Types.ObjectId | null;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   author: Types.ObjectId;

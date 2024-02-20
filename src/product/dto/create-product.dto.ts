@@ -1,13 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsMongoId,
-  IsNotEmpty,
-  IsNumber,
-  IsPositive,
-  IsString,
-  Length,
-  Min,
-} from 'class-validator';
+import { IsMongoId, IsNotEmpty, IsString, Length } from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateProductDto {
