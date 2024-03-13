@@ -242,6 +242,7 @@ export class ProductService {
 
     const totalItemsQuery = this.productModel.find({
       title: { $regex: new RegExp(title, 'i') },
+      price: { $ne: 0 },
     });
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
