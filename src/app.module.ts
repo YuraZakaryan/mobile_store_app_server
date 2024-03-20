@@ -10,6 +10,7 @@ import { ProductModule } from './product/product.module';
 import { OrderModule } from './order/order.module';
 import * as path from 'path';
 import { AppController } from './app.controller';
+import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AppController } from './app.controller';
     FileModule,
     ProductModule,
     OrderModule,
+    WebhookModule,
   ],
   controllers: [AppController],
 })

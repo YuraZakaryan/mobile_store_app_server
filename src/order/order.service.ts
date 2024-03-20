@@ -94,8 +94,6 @@ export class OrderService {
         await existOrder.save();
       }
     }
-    product.count = Math.max(product.count - dto.itemCount, 0);
-    await product.save();
     return product;
   }
 
@@ -113,7 +111,7 @@ export class OrderService {
         const orderItem = await this.orderItemModel.findById(item._id).lean();
         const oldItemCount: number = orderItem.itemCount;
 
-        if (item.itemCount - oldItemCount > product.count) {
+        if (item.itemCount > product.count) {
           throw new HttpException(
             'Not enough quantity in stock',
             HttpStatus.BAD_GATEWAY,
@@ -190,11 +188,6 @@ export class OrderService {
         { $pull: { items: id } },
       );
     }
-    const product = await this.productModel.findById(orderItem.product);
-    if (product) {
-      product.count += orderItem.itemCount;
-      await product.save();
-    }
     return orderItem._id;
   }
 
@@ -223,79 +216,35 @@ export class OrderService {
       throw new HttpException('Please type status', HttpStatus.FORBIDDEN);
     }
 
-    if (
-      dto.status === EOrderStatus.ORDERED &&
-      order.status !== EOrderStatus.ORDERED
-    ) {
-      order.acceptedTime = null;
-      order.deliveredTime = null;
-      order.rejectedTime = null;
+    switch (dto.status) {
+      case EOrderStatus.ACCEPTED:
+        if (order.status !== EOrderStatus.ACCEPTED) {
+          order.acceptedTime = currentDate;
+          await order.save();
 
-      if (dto.items && order.status === EOrderStatus.REJECTED) {
-        for (const item of dto.items) {
-          const productId = item.product._id;
-          const product = await this.productModel.findById(productId);
+          for (const item of dto.items) {
+            const productId = item.product._id;
+            const product = await this.productModel.findById(productId);
 
-          if (product) {
-            product.count = Math.max(product.count - item.itemCount, 0);
-            await product.save();
+            if (product) {
+              product.count = Math.max(product.count - item.itemCount, 0);
+              await product.save();
+            }
           }
         }
-      }
-    } else if (
-      dto.status === EOrderStatus.ACCEPTED &&
-      order.status !== EOrderStatus.ACCEPTED
-    ) {
-      order.acceptedTime = currentDate;
-      order.deliveredTime = null;
-      order.rejectedTime = null;
-
-      await order.save();
-
-      if (dto.items && order.status === EOrderStatus.REJECTED) {
-        for (const item of dto.items) {
-          const productId = item.product._id;
-          const product = await this.productModel.findById(productId);
-
-          if (product) {
-            product.count = Math.max(product.count - item.itemCount, 0);
-            await product.save();
-          }
+        break;
+      case EOrderStatus.DELIVERED:
+        if (order.status !== EOrderStatus.DELIVERED) {
+          order.deliveredTime = currentDate;
+          await order.save();
         }
-      }
-    } else if (
-      dto.status === EOrderStatus.DELIVERED &&
-      order.status !== EOrderStatus.DELIVERED
-    ) {
-      order.deliveredTime = currentDate;
-      order.rejectedTime = null;
-
-      if (dto.items && order.status === EOrderStatus.REJECTED) {
-        for (const item of dto.items) {
-          const productId = item.product._id;
-          const product = await this.productModel.findById(productId);
-
-          if (product) {
-            product.count = Math.max(product.count - item.itemCount, 0);
-            await product.save();
-          }
-        }
-      }
-    } else if (dto.status === EOrderStatus.REJECTED) {
-      order.rejectedTime = currentDate;
-
-      if (dto.items && order.status !== EOrderStatus.REJECTED) {
-        for (const item of dto.items) {
-          const productId = item.product._id;
-          const product = await this.productModel.findById(productId);
-
-          if (product) {
-            product.count += item.itemCount;
-            await product.save();
-          }
-        }
-      }
+        break;
+      case EOrderStatus.REJECTED:
+        order.rejectedTime = currentDate;
+        await order.save();
+        break;
     }
+
     order.status = dto.status;
     await order.save();
 
