@@ -32,7 +32,7 @@ export class WebhookService {
     const id: Types.ObjectId = admin[0]._id;
 
     const authorizationHeader = {
-      Authorization: 'ec2ff5c42bbcb45e1751dcf626778c62984d602a',
+      Authorization: '44600792695a904d7f79105c9bf6ec673bd0a10e',
     };
 
     const auditHref: string = dto.auditContext.meta.href;
@@ -62,15 +62,33 @@ export class WebhookService {
         }),
       )
       .subscribe(async (productData: AxiosResponse<ProductInfoProps>) => {
-        const { name, description, code, salePrices } = productData.data;
+        const { name, description, code, salePrices, images } =
+          productData.data;
+
+        let image: string | null = null;
+
+        try {
+          const imageResponse = await this.httpService
+            .get(images.meta.href, { headers: authorizationHeader })
+            .toPromise();
+
+          const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
+
+          if (downloadHref) {
+            image = downloadHref.replace(
+              'https://api.moysklad.ru/api/remap/1.2/download/',
+              'https://online.moysklad.ru/app/download/',
+            );
+          }
+        } catch (error) {
+          console.error('Error fetching image:', error);
+        }
 
         const price: number = salePrices[0].value;
         const numWithoutLastTwoDigits: number =
           price > 0 ? parseInt(price.toString().slice(0, -2)) : 0;
 
-        const existProduct = await this.productModel.findOne({
-          title: name,
-        });
+        const existProduct = await this.productModel.findOne({ title: name });
 
         if (!existProduct) {
           await this.productModel.create({
@@ -80,7 +98,7 @@ export class WebhookService {
             price: numWithoutLastTwoDigits,
             count: 0,
             discount: 0,
-            picture: null,
+            picture: image || null,
             category: null,
             author: id,
           });
@@ -90,7 +108,7 @@ export class WebhookService {
 
   updateByWebhook(dto: TAuditData): void {
     const authorizationHeader = {
-      Authorization: 'ec2ff5c42bbcb45e1751dcf626778c62984d602a',
+      Authorization: '44600792695a904d7f79105c9bf6ec673bd0a10e',
     };
 
     const auditHref: string = dto.auditContext.meta.href;
@@ -120,7 +138,27 @@ export class WebhookService {
         }),
       )
       .subscribe(async (productData: AxiosResponse<ProductInfoProps>) => {
-        const { name, description, code, salePrices } = productData.data;
+        const { name, description, code, salePrices, images } =
+          productData.data;
+
+        let image: string | null = null;
+
+        try {
+          const imageResponse = await this.httpService
+            .get(images.meta.href, { headers: authorizationHeader })
+            .toPromise();
+
+          const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
+
+          if (downloadHref) {
+            image = downloadHref.replace(
+              'https://api.moysklad.ru/api/remap/1.2/download/',
+              'https://online.moysklad.ru/app/download/',
+            );
+          }
+        } catch (error) {
+          console.error('Error fetching image:', error);
+        }
 
         const price: number = salePrices[0].value;
         const numWithoutLastTwoDigits: number =
@@ -131,6 +169,7 @@ export class WebhookService {
           {
             title: name,
             price: numWithoutLastTwoDigits,
+            picture: image,
             code,
             information: description,
           },

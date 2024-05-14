@@ -2,7 +2,7 @@ import { Body, Controller, HttpStatus, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CreateProductWithPictureDto } from '../product/dto/create-product-with-picture.dto';
 import { WebhookService } from './webhook.service';
-import { TAuditContext, TAuditData } from './types';
+import { TAuditData } from './types';
 
 @Controller('webhook')
 export class WebhookController {

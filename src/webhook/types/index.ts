@@ -130,7 +130,14 @@ export type ProductInfoProps = {
   isSerialTrackable: 'boolean';
   trackingType: 'string';
   images: {
-    href: 'string';
+    meta: {
+      href: string;
+      type: string;
+      mediaType: string;
+      size: number;
+      limit: number;
+      offset: number;
+    };
   };
   files: {
     href: 'string';
