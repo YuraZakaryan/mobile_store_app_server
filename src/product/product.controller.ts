@@ -110,6 +110,13 @@ export class ProductController {
     return this.productService.update(params, dto, picture);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @Get('sync')
+  sync(@Req() req: ReqUser) {
+    return this.productService.sync(req);
+  }
+
   @ApiOperation({ summary: 'Search product by title' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
   @ApiResponse({

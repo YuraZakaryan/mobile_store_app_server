@@ -1,6 +1,5 @@
 import { Body, Controller, HttpStatus, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { CreateProductWithPictureDto } from '../product/dto/create-product-with-picture.dto';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service';
 import { TAuditData } from './types';
 
@@ -13,14 +12,13 @@ export class WebhookController {
     description: 'Product created successfully by webhook',
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
-  @ApiBody({ type: CreateProductWithPictureDto })
   @Post('product/create')
-  createByWebhook(@Body() dto: TAuditData): Promise<void> {
+  createByWebhook(@Body() dto: TAuditData) {
     return this.webhookService.createByWebhook(dto);
   }
 
   @Post('product/update')
-  updateByWebhook(@Body() dto: TAuditData) {
+  updateByWebhook(@Body() dto: TAuditData): void {
     return this.webhookService.updateByWebhook(dto);
   }
 }

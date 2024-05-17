@@ -31,8 +31,10 @@ export class WebhookService {
 
     const id: Types.ObjectId = admin[0]._id;
 
+    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
+
     const authorizationHeader = {
-      Authorization: '44600792695a904d7f79105c9bf6ec673bd0a10e',
+      Authorization: token || '',
     };
 
     const auditHref: string = dto.auditContext.meta.href;
@@ -107,8 +109,9 @@ export class WebhookService {
   }
 
   updateByWebhook(dto: TAuditData): void {
+    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
     const authorizationHeader = {
-      Authorization: '44600792695a904d7f79105c9bf6ec673bd0a10e',
+      Authorization: token || '',
     };
 
     const auditHref: string = dto.auditContext.meta.href;

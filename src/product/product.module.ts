@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Product, ProductSchema } from './product.schema';
 import { FileService } from '../file/file.service';
 import { Category, CategorySchema } from '../category/category.schema';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { Category, CategorySchema } from '../category/category.schema';
         schema: CategorySchema,
       },
     ]),
+    HttpModule,
   ],
   controllers: [ProductController],
   providers: [ProductService, FileService],

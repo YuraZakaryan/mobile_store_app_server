@@ -13,6 +13,10 @@ import {
 } from '../types';
 import { TReturnItem } from '../user/types';
 import * as xlsx from 'xlsx';
+import { HttpService } from '@nestjs/axios';
+import { catchError, finalize, firstValueFrom, Subscription } from 'rxjs';
+import { AxiosResponse } from 'axios';
+import { TProductResponse } from './types';
 
 @Injectable()
 export class ProductService {
@@ -20,11 +24,12 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(Category.name) private categoryModel: Model<Category>,
     private fileService: FileService,
+    private readonly httpService: HttpService,
   ) {}
 
   async create(
     dto: CreateProductDto,
-    picture: Express.Multer.File,
+    picture?: Express.Multer.File,
   ): Promise<Product> {
     const category = await this.categoryModel.findById(dto.category);
     if (!category) {
@@ -153,7 +158,7 @@ export class ProductService {
   async update(
     params: FindOneParams,
     dto: CreateProductDto,
-    picture: Express.Multer.File,
+    picture?: Express.Multer.File,
   ): Promise<Product> {
     const id = params.id;
     const currentDate: Date = new Date();
@@ -226,6 +231,81 @@ export class ProductService {
     }
 
     return updatedProduct.populate('author');
+  }
+
+  async sync(req: ReqUser) {
+    const id: Types.ObjectId = req.user.sub;
+
+    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
+    const href = 'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
+
+    const authorizationHeader = {
+      Authorization: token || '',
+      'Accept-Encoding': 'gzip',
+    };
+
+    let updatedCount: number = 0;
+    let createdCount: number = 0;
+
+    const { data } = await firstValueFrom(
+      this.httpService.get(href, { headers: authorizationHeader }).pipe(
+        catchError((error) => {
+          console.error('Error fetching products:', error);
+          throw error;
+        }),
+        finalize((): void => {
+          console.log('Sync completed');
+        }),
+      ),
+    );
+
+    const { rows } = data;
+
+    for (const product of rows) {
+      const existProduct = await this.productModel.findOne({
+        code: product.code,
+      });
+
+      let price: number;
+
+      if (product.salePrices[0].value) {
+        price = Number(product.salePrices[0].value.toString().slice(0, -2));
+      }
+
+      if (existProduct) {
+        await this.productModel.updateOne(
+          { code: existProduct.code },
+          {
+            title: product.name,
+            code: product.code,
+            price: price,
+            information: product.description,
+          },
+        );
+        updatedCount++;
+      } else {
+        await this.productModel.create({
+          title: product.name,
+          code: product.code,
+          count: 0,
+          price: price || 0,
+          information: product.description || '',
+          category: null,
+          discount: 0,
+          author: id,
+        });
+        createdCount++;
+      }
+    }
+    if (createdCount === 0 && updatedCount === 0) {
+      throw new HttpException(
+        'There are not products for sync',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return {
+      message: `Successfully synced, created ${createdCount} and updated ${updatedCount} products`,
+    };
   }
 
   async search(
