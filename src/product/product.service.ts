@@ -14,15 +14,15 @@ import {
 import { TReturnItem } from '../user/types';
 import * as xlsx from 'xlsx';
 import { HttpService } from '@nestjs/axios';
-import { catchError, finalize, firstValueFrom, Subscription } from 'rxjs';
-import { AxiosResponse } from 'axios';
-import { TProductResponse } from './types';
+import { catchError, finalize, firstValueFrom } from 'rxjs';
+import { User } from '../user/user.schema';
 
 @Injectable()
 export class ProductService {
   constructor(
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(Category.name) private categoryModel: Model<Category>,
+    @InjectModel(User.name) private userModel: Model<User>,
     private fileService: FileService,
     private readonly httpService: HttpService,
   ) {}
@@ -179,12 +179,12 @@ export class ProductService {
     const updateData: TProductUpdateData = {
       title: dto.title,
       information: dto.information,
-      price: Math.max(parseFloat(String(dto.price)), 0),
-      code: dto.code,
-      discount: dto.discount
-        ? Math.max(parseFloat(String(dto.discount)), 0)
-        : 0,
-      count: Math.max(parseFloat(String(dto.count)), 0),
+      // price: Math.max(parseFloat(String(dto.price)), 0),
+      // code: dto.code,
+      // discount: dto.discount
+      //   ? Math.max(parseFloat(String(dto.discount)), 0)
+      //   : 0,
+      // count: Math.max(parseFloat(String(dto.count)), 0),
       category: dto.category,
       author: dto.author,
       updatedAt: isoString,
@@ -236,8 +236,20 @@ export class ProductService {
   async sync(req: ReqUser) {
     const id: Types.ObjectId = req.user.sub;
 
-    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
-    const href = 'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
+    const user = await this.userModel.findById(id);
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    if (!user.stockToken) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    const token: string = user.stockToken;
+
+    const href: string =
+      'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
 
     const authorizationHeader = {
       Authorization: token || '',
@@ -249,9 +261,8 @@ export class ProductService {
 
     const { data } = await firstValueFrom(
       this.httpService.get(href, { headers: authorizationHeader }).pipe(
-        catchError((error) => {
-          console.error('Error fetching products:', error);
-          throw error;
+        catchError(() => {
+          throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
         }),
         finalize((): void => {
           console.log('Sync completed');
@@ -267,6 +278,24 @@ export class ProductService {
       });
 
       let price: number;
+      let image: string | null = null;
+
+      try {
+        const imageResponse = await this.httpService
+          .get(product.images.meta.href, { headers: authorizationHeader })
+          .toPromise();
+
+        const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
+
+        if (downloadHref) {
+          image = downloadHref.replace(
+            'https://api.moysklad.ru/api/remap/1.2/download/',
+            'https://online.moysklad.ru/app/download/',
+          );
+        }
+      } catch (error) {
+        console.error('Error fetching image:', error);
+      }
 
       if (product.salePrices[0].value) {
         price = Number(product.salePrices[0].value.toString().slice(0, -2));
@@ -279,6 +308,7 @@ export class ProductService {
             title: product.name,
             code: product.code,
             price: price,
+            picture: image,
             information: product.description,
           },
         );
@@ -289,6 +319,7 @@ export class ProductService {
           code: product.code,
           count: 0,
           price: price || 0,
+          picture: image || null,
           information: product.description || '',
           category: null,
           discount: 0,
@@ -299,7 +330,7 @@ export class ProductService {
     }
     if (createdCount === 0 && updatedCount === 0) {
       throw new HttpException(
-        'There are not products for sync',
+        'there_are_not_products_for_sync',
         HttpStatus.NOT_FOUND,
       );
     }

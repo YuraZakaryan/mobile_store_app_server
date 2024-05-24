@@ -29,10 +29,10 @@ export type TProductUpdateData = {
   title: string;
   information: string;
   picture?: string;
-  price: number;
-  code: string;
-  discount: number;
-  count: number;
+  // price: number;
+  // code: string;
+  // discount: number;
+  // count: number;
   category: Types.ObjectId;
   author: Types.ObjectId;
   updatedAt: string;

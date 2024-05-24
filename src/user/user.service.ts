@@ -32,6 +32,7 @@ export class UserService {
     return this.userModel.create({
       ...dto,
       role: !dto.role ? 'USER' : dto.role,
+      stockToken: '',
       refreshToken: refreshToken,
       confirmed: !dto.confirmed ? false : dto.confirmed,
     });
@@ -164,6 +165,7 @@ export class UserService {
         phone: dto.phone,
         address: dto.address,
         confirmed: dto.confirmed,
+        stockToken: dto.stockToken,
         role: dto.role,
       },
       { new: true },

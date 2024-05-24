@@ -31,6 +31,12 @@ export class UpdateUserDto {
   readonly mail: string;
 
   @ApiProperty({
+    example: '44600792695a904d7f79105c9bf6ec673bd0a10e',
+    description: 'Stock Token',
+  })
+  readonly stockToken: string;
+
+  @ApiProperty({
     example: 'Yerevan, Aram Khachatryan 14',
     description: 'address',
   })

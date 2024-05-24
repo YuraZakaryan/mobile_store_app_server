@@ -52,6 +52,9 @@ export class User {
 
   @Prop()
   refreshToken: string;
+
+  @Prop()
+  stockToken: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -31,7 +31,11 @@ export class WebhookService {
 
     const id: Types.ObjectId = admin[0]._id;
 
-    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
+    const token: string = admin[0].stockToken;
+
+    if (token) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
 
     const authorizationHeader = {
       Authorization: token || '',
