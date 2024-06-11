@@ -234,9 +234,8 @@ export class ProductService {
   }
 
   async sync(req: ReqUser) {
-    const id: Types.ObjectId = req.user.sub;
-
-    const user = await this.userModel.findById(id);
+    const userId: Types.ObjectId = req.user.sub;
+    const user = await this.userModel.findById(userId);
 
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
@@ -247,68 +246,59 @@ export class ProductService {
     }
 
     const token: string = user.stockToken;
-
-    const href: string =
+    const apiUrl: string =
       'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
-
-    const authorizationHeader = {
-      Authorization: token || '',
-      'Accept-Encoding': 'gzip',
-    };
 
     let updatedCount: number = 0;
     let createdCount: number = 0;
 
-    const { data } = await firstValueFrom(
-      this.httpService.get(href, { headers: authorizationHeader }).pipe(
-        catchError(() => {
-          throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
-        }),
-        finalize((): void => {
-          console.log('Sync completed');
-        }),
-      ),
-    );
-
+    const { data } = await this.fetchProductsFromStock(apiUrl, token);
     const { rows } = data;
 
     for (const product of rows) {
-      const existProduct = await this.productModel.findOne({
+      const existingProduct = await this.productModel.findOne({
         code: product.code,
       });
 
-      let price: number;
-      let image: string | null = null;
+      const imageMetaHref = product.images?.meta?.href;
+      let picturePath: string | undefined;
 
-      try {
-        const imageResponse = await this.httpService
-          .get(product.images.meta.href, { headers: authorizationHeader })
-          .toPromise();
+      if (imageMetaHref) {
+        const imageResponse = await this.fetchProductsFromStock(
+          imageMetaHref,
+          token,
+        );
+        const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
 
-        const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
-
-        if (downloadHref) {
-          image = downloadHref.replace(
-            'https://api.moysklad.ru/api/remap/1.2/download/',
-            'https://online.moysklad.ru/app/download/',
+        if (pictureHref) {
+          const pictureData = await this.fetchImageFromStock(
+            pictureHref,
+            token,
           );
+          if (pictureData) {
+            if (existingProduct?.picture) {
+              this.fileService.removeFile(existingProduct.picture);
+            }
+            picturePath = await this.fileService.createFile(
+              FileType.IMAGE,
+              pictureData,
+            );
+          }
         }
-      } catch (error) {
-        console.error('Error fetching image:', error);
       }
 
-      if (product.salePrices[0].value) {
-        price = Number(product.salePrices[0].value.toString().slice(0, -2));
-      }
+      const price = product.salePrices?.[0]?.value
+        ? Number(product.salePrices[0].value.toString().slice(0, -2))
+        : 0;
 
-      if (existProduct) {
+      if (existingProduct) {
         await this.productModel.updateOne(
-          { code: existProduct.code },
+          { code: existingProduct.code },
           {
             title: product.name,
             code: product.code,
             price: price,
-            picture: image,
+            picture: picturePath,
             information: product.description,
           },
         );
@@ -318,22 +308,24 @@ export class ProductService {
           title: product.name,
           code: product.code,
           count: 0,
-          price: price || 0,
-          picture: image || null,
+          price: price,
+          picture: picturePath || null,
           information: product.description || '',
           category: null,
           discount: 0,
-          author: id,
+          author: userId,
         });
         createdCount++;
       }
     }
+
     if (createdCount === 0 && updatedCount === 0) {
       throw new HttpException(
         'there_are_not_products_for_sync',
         HttpStatus.NOT_FOUND,
       );
     }
+
     return {
       message: `Successfully synced, created ${createdCount} and updated ${updatedCount} products`,
     };
@@ -449,5 +441,50 @@ export class ProductService {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
     return product;
+  }
+  async fetchImageFromStock(imageHref: string, token: string) {
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'image/png',
+    };
+
+    try {
+      const { data: imageData } = await this.httpService
+        .get(imageHref, {
+          headers: authorizationHeader,
+          responseType: 'arraybuffer',
+        })
+        .toPromise();
+      return imageData;
+    } catch (error) {
+      console.error('Error fetching image:', error);
+      return null;
+    }
+  }
+  async fetchProductsFromStock(url: string, token: string) {
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'image/png',
+    };
+
+    try {
+      return await firstValueFrom(
+        this.httpService.get(url, { headers: authorizationHeader }).pipe(
+          catchError(() => {
+            throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+          }),
+          finalize((): void => {
+            console.log('Sync completed');
+          }),
+        ),
+      );
+    } catch (error) {
+      throw new HttpException(
+        'error_fetching_products_from_stock',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

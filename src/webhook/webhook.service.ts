@@ -12,6 +12,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Product } from '../product/product.schema';
 import { Model, Types } from 'mongoose';
 import { User } from '../user/user.schema';
+import { ProductService } from '../product/product.service';
+import { FileService, FileType } from '../file/file.service';
 
 @Injectable()
 export class WebhookService {
@@ -19,6 +21,8 @@ export class WebhookService {
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly httpService: HttpService,
+    private readonly fileService: FileService,
+    private readonly productService: ProductService,
   ) {}
   async createByWebhook(dto: TAuditData): Promise<void> {
     const admin = await this.userModel.find({
@@ -33,7 +37,7 @@ export class WebhookService {
 
     const token: string = admin[0].stockToken;
 
-    if (token) {
+    if (!token) {
       throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
     }
 
@@ -71,20 +75,26 @@ export class WebhookService {
         const { name, description, code, salePrices, images } =
           productData.data;
 
-        let image: string | null = null;
+        let picturePath: string | null = null;
 
         try {
           const imageResponse = await this.httpService
             .get(images.meta.href, { headers: authorizationHeader })
             .toPromise();
 
-          const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
+          const pictureHref = imageResponse.data.rows[0]?.meta.downloadHref;
 
-          if (downloadHref) {
-            image = downloadHref.replace(
-              'https://api.moysklad.ru/api/remap/1.2/download/',
-              'https://online.moysklad.ru/app/download/',
+          if (pictureHref) {
+            const pictureData = await this.productService.fetchImageFromStock(
+              pictureHref,
+              token,
             );
+            if (productData) {
+              picturePath = await this.fileService.createFile(
+                FileType.IMAGE,
+                pictureData,
+              );
+            }
           }
         } catch (error) {
           console.error('Error fetching image:', error);
@@ -104,7 +114,7 @@ export class WebhookService {
             price: numWithoutLastTwoDigits,
             count: 0,
             discount: 0,
-            picture: image || null,
+            picture: picturePath,
             category: null,
             author: id,
           });
@@ -112,8 +122,21 @@ export class WebhookService {
       });
   }
 
-  updateByWebhook(dto: TAuditData): void {
-    const token = '44600792695a904d7f79105c9bf6ec673bd0a10e';
+  async updateByWebhook(dto: TAuditData) {
+    const admin = await this.userModel.find({
+      role: 'ADMIN',
+    });
+
+    if (!admin) {
+      throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
+    }
+
+    const token: string = admin[0].stockToken;
+
+    if (!token) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
     const authorizationHeader = {
       Authorization: token || '',
     };
@@ -148,20 +171,31 @@ export class WebhookService {
         const { name, description, code, salePrices, images } =
           productData.data;
 
-        let image: string | null = null;
+        const existProduct = await this.productModel.findOne({ code });
+
+        let picturePath: string | undefined;
 
         try {
           const imageResponse = await this.httpService
             .get(images.meta.href, { headers: authorizationHeader })
             .toPromise();
 
-          const downloadHref = imageResponse.data.rows[0].meta.downloadHref;
+          const pictureHref = imageResponse.data.rows[0]?.meta.downloadHref;
 
-          if (downloadHref) {
-            image = downloadHref.replace(
-              'https://api.moysklad.ru/api/remap/1.2/download/',
-              'https://online.moysklad.ru/app/download/',
+          if (pictureHref) {
+            const pictureData = await this.productService.fetchImageFromStock(
+              pictureHref,
+              token,
             );
+            if (productData) {
+              if (existProduct.picture) {
+                this.fileService.removeFile(existProduct.picture);
+              }
+              picturePath = await this.fileService.createFile(
+                FileType.IMAGE,
+                pictureData,
+              );
+            }
           }
         } catch (error) {
           console.error('Error fetching image:', error);
@@ -176,7 +210,7 @@ export class WebhookService {
           {
             title: name,
             price: numWithoutLastTwoDigits,
-            picture: image,
+            picture: picturePath,
             code,
             information: description,
           },

@@ -18,7 +18,8 @@ export class WebhookController {
   }
 
   @Post('product/update')
-  updateByWebhook(@Body() dto: TAuditData): void {
+  updateByWebhook(@Body() dto: TAuditData) {
+    console.log('aaaaa');
     return this.webhookService.updateByWebhook(dto);
   }
 }
