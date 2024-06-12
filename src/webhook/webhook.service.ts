@@ -72,8 +72,14 @@ export class WebhookService {
         }),
       )
       .subscribe(async (productData: AxiosResponse<ProductInfoProps>) => {
-        const { name, description, code, salePrices, images } =
-          productData.data;
+        const {
+          id: productId,
+          name,
+          description,
+          code,
+          salePrices,
+          images,
+        } = productData.data;
 
         let picturePath: string | null = null;
 
@@ -117,6 +123,8 @@ export class WebhookService {
             picture: picturePath,
             category: null,
             author: id,
+            productId,
+            idProductByStock: productId,
           });
         }
       });
@@ -215,6 +223,54 @@ export class WebhookService {
             information: description,
           },
         );
+      });
+  }
+
+  async deleteByWebhook(dto: TAuditData) {
+    const admin = await this.userModel.find({
+      role: 'ADMIN',
+    });
+
+    if (!admin) {
+      throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
+    }
+
+    const token: string = admin[0].stockToken;
+
+    if (!token) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    const auditHref: string = dto.auditContext.meta.href;
+
+    const authorizationHeader = {
+      Authorization: token || '',
+    };
+
+    this.httpService
+      .get<AuditLogProps>(auditHref, { headers: authorizationHeader })
+      .pipe(
+        catchError((error) => {
+          console.error('Error fetching audit log:', error);
+          return throwError(() => error);
+        }),
+        switchMap((auditData: AxiosResponse<AuditLogProps>) =>
+          this.httpService.get<AuditLogResponse>(
+            auditData.data.events.meta.href,
+            { headers: authorizationHeader },
+          ),
+        ),
+        catchError((error) => {
+          console.error('Error fetching product info:', error);
+          return throwError(() => error);
+        }),
+      )
+      .subscribe(async (productData: any) => {
+        const productHref =
+          productData.data.rows[0].entity.meta.href.split('/');
+        const productId = productHref[productHref.length - 1];
+
+        await this.productService.deleteByProductId(productId);
       });
   }
 }

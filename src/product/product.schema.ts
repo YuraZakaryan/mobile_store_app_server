@@ -32,6 +32,9 @@ export class Product {
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   author: Types.ObjectId;
+
+  @Prop({ default: null })
+  idProductByStock: Types.ObjectId;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

@@ -14,12 +14,17 @@ export class WebhookController {
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
   @Post('product/create')
   createByWebhook(@Body() dto: TAuditData) {
+    console.log('aaaaaa');
     return this.webhookService.createByWebhook(dto);
   }
 
   @Post('product/update')
   updateByWebhook(@Body() dto: TAuditData) {
-    console.log('aaaaa');
     return this.webhookService.updateByWebhook(dto);
+  }
+
+  @Post('product/delete')
+  deleteByWebhook(@Body() dto: TAuditData) {
+    return this.webhookService.deleteByWebhook(dto);
   }
 }

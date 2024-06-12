@@ -14,7 +14,7 @@ import {
 import { TReturnItem } from '../user/types';
 import * as xlsx from 'xlsx';
 import { HttpService } from '@nestjs/axios';
-import { catchError, finalize, firstValueFrom } from 'rxjs';
+import { catchError, finalize, firstValueFrom, throwError } from 'rxjs';
 import { User } from '../user/user.schema';
 
 @Injectable()
@@ -423,6 +423,33 @@ export class ProductService {
         'Error deleting product',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    }
+
+    await this.categoryModel.updateOne(
+      { _id: product.category },
+      { $pull: { products: product._id } },
+    );
+
+    return product._id;
+  }
+
+  async deleteByProductId(productId: string): Promise<Types.ObjectId> {
+    const product = await this.productModel.findOne({
+      idProductByStock: productId,
+    });
+
+    if (!product) {
+      console.error('Product not found!');
+      return;
+    }
+
+    const deletedProduct = await this.productModel.findOneAndDelete({
+      idProductByStock: productId,
+    });
+
+    if (!deletedProduct) {
+      console.error('Error deleting product');
+      return;
     }
 
     await this.categoryModel.updateOne(
