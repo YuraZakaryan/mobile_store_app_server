@@ -14,7 +14,7 @@ import {
 import { TReturnItem } from '../user/types';
 import * as xlsx from 'xlsx';
 import { HttpService } from '@nestjs/axios';
-import { catchError, finalize, firstValueFrom, throwError } from 'rxjs';
+import { catchError, finalize, firstValueFrom } from 'rxjs';
 import { User } from '../user/user.schema';
 
 @Injectable()
@@ -233,6 +233,104 @@ export class ProductService {
     return updatedProduct.populate('author');
   }
 
+  // async sync(req: ReqUser) {
+  //   const userId: Types.ObjectId = req.user.sub;
+  //   const user = await this.userModel.findById(userId);
+  //
+  //   if (!user) {
+  //     throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+  //   }
+  //
+  //   if (!user.stockToken) {
+  //     throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+  //   }
+  //
+  //   const token: string = user.stockToken;
+  //   const apiUrl: string =
+  //     'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
+  //
+  //   let updatedCount: number = 0;
+  //   let createdCount: number = 0;
+  //
+  //   const { data } = await this.fetchProductsFromStock(apiUrl, token);
+  //   const { rows } = data;
+  //
+  //   for (const product of rows) {
+  //     const existingProduct = await this.productModel.findOne({
+  //       code: product.code,
+  //     });
+  //
+  //     const imageMetaHref = product.images?.meta?.href;
+  //     let picturePath: string | undefined;
+  //
+  //     if (imageMetaHref) {
+  //       const imageResponse = await this.fetchProductsFromStock(
+  //         imageMetaHref,
+  //         token,
+  //       );
+  //       const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
+  //
+  //       if (pictureHref) {
+  //         const pictureData = await this.fetchImageFromStock(
+  //           pictureHref,
+  //           token,
+  //         );
+  //         if (pictureData) {
+  //           if (existingProduct?.picture) {
+  //             this.fileService.removeFile(existingProduct.picture);
+  //           }
+  //           picturePath = await this.fileService.createFile(
+  //             FileType.IMAGE,
+  //             pictureData,
+  //           );
+  //         }
+  //       }
+  //     }
+  //
+  //     const price = product.salePrices?.[0]?.value
+  //       ? Number(product.salePrices[0].value.toString().slice(0, -2))
+  //       : 0;
+  //
+  //     if (existingProduct) {
+  //       await this.productModel.updateOne(
+  //         { code: existingProduct.code },
+  //         {
+  //           title: product.name,
+  //           code: product.code,
+  //           price: price,
+  //           picture: picturePath,
+  //           information: product.description,
+  //         },
+  //       );
+  //       updatedCount++;
+  //     } else {
+  //       await this.productModel.create({
+  //         title: product.name,
+  //         code: product.code,
+  //         count: 0,
+  //         price: price,
+  //         picture: picturePath || null,
+  //         information: product.description || '',
+  //         category: null,
+  //         discount: 0,
+  //         author: userId,
+  //       });
+  //       createdCount++;
+  //     }
+  //   }
+  //
+  //   if (createdCount === 0 && updatedCount === 0) {
+  //     throw new HttpException(
+  //       'there_are_not_products_for_sync',
+  //       HttpStatus.NOT_FOUND,
+  //     );
+  //   }
+  //
+  //   return {
+  //     message: `Successfully synced, created ${createdCount} and updated ${updatedCount} products`,
+  //   };
+  // }
+
   async sync(req: ReqUser) {
     const userId: Types.ObjectId = req.user.sub;
     const user = await this.userModel.findById(userId);
@@ -248,74 +346,92 @@ export class ProductService {
     const token: string = user.stockToken;
     const apiUrl: string =
       'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
+    const limit: number = 1000; // Максимальное количество сущностей за один запрос
+    let offset: number = 0;
 
     let updatedCount: number = 0;
     let createdCount: number = 0;
 
-    const { data } = await this.fetchProductsFromStock(apiUrl, token);
-    const { rows } = data;
+    let hasMore: boolean = true;
 
-    for (const product of rows) {
-      const existingProduct = await this.productModel.findOne({
-        code: product.code,
-      });
+    while (hasMore) {
+      const { data } = await this.fetchProductsFromStock(
+        apiUrl,
+        token,
+        limit,
+        offset,
+      );
+      const { rows } = data;
+      offset += limit;
 
-      const imageMetaHref = product.images?.meta?.href;
-      let picturePath: string | undefined;
-
-      if (imageMetaHref) {
-        const imageResponse = await this.fetchProductsFromStock(
-          imageMetaHref,
-          token,
-        );
-        const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
-
-        if (pictureHref) {
-          const pictureData = await this.fetchImageFromStock(
-            pictureHref,
-            token,
-          );
-          if (pictureData) {
-            if (existingProduct?.picture) {
-              this.fileService.removeFile(existingProduct.picture);
-            }
-            picturePath = await this.fileService.createFile(
-              FileType.IMAGE,
-              pictureData,
-            );
-          }
-        }
+      if (rows.length < limit) {
+        hasMore = false;
       }
 
-      const price = product.salePrices?.[0]?.value
-        ? Number(product.salePrices[0].value.toString().slice(0, -2))
-        : 0;
+      for (const product of rows) {
+        const existingProduct = await this.productModel.findOne({
+          code: product.code,
+        });
 
-      if (existingProduct) {
-        await this.productModel.updateOne(
-          { code: existingProduct.code },
-          {
+        const imageMetaHref = product.images?.meta?.href;
+        let picturePath: string | undefined;
+
+        if (imageMetaHref) {
+          const imageResponse = await this.fetchProductsFromStock(
+            imageMetaHref,
+            token,
+            limit,
+            0,
+          );
+          const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
+
+          if (pictureHref) {
+            const pictureData = await this.fetchImageFromStock(
+              pictureHref,
+              token,
+            );
+            if (pictureData) {
+              if (existingProduct?.picture) {
+                await this.fileService.removeFile(existingProduct.picture);
+              }
+              picturePath = await this.fileService.createFile(
+                FileType.IMAGE,
+                pictureData,
+              );
+            }
+          }
+        }
+
+        const price = product.salePrices?.[0]?.value
+          ? Number(product.salePrices[0].value.toString().slice(0, -2))
+          : 0;
+
+        if (existingProduct) {
+          await this.productModel.updateOne(
+            { code: existingProduct.code },
+            {
+              title: product.name,
+              code: product.code,
+              price: price,
+              picture: picturePath,
+              information: product.description,
+            },
+          );
+          updatedCount++;
+        } else {
+          await this.productModel.create({
             title: product.name,
             code: product.code,
+            count: 0,
             price: price,
-            picture: picturePath,
-            information: product.description,
-          },
-        );
-        updatedCount++;
-      } else {
-        await this.productModel.create({
-          title: product.name,
-          code: product.code,
-          count: 0,
-          price: price,
-          picture: picturePath || null,
-          information: product.description || '',
-          category: null,
-          discount: 0,
-          author: userId,
-        });
-        createdCount++;
+            picture: picturePath || null,
+            information: product.description || '',
+            category: null,
+            discount: 0,
+            author: userId,
+          });
+          createdCount++;
+        }
       }
     }
 
@@ -489,7 +605,12 @@ export class ProductService {
       return null;
     }
   }
-  async fetchProductsFromStock(url: string, token: string) {
+  async fetchProductsFromStock(
+    url: string,
+    token: string,
+    limit: number,
+    offset: number,
+  ) {
     const authorizationHeader = {
       Authorization: token,
       'Accept-Encoding': 'gzip',
@@ -498,14 +619,16 @@ export class ProductService {
 
     try {
       return await firstValueFrom(
-        this.httpService.get(url, { headers: authorizationHeader }).pipe(
-          catchError(() => {
-            throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
-          }),
-          finalize((): void => {
-            console.log('Sync completed');
-          }),
-        ),
+        this.httpService
+          .get(url, { headers: authorizationHeader, params: { limit, offset } })
+          .pipe(
+            catchError(() => {
+              throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+            }),
+            finalize((): void => {
+              console.log('Sync completed');
+            }),
+          ),
       );
     } catch (error) {
       throw new HttpException(
