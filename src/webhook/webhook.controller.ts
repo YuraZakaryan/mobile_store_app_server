@@ -14,7 +14,6 @@ export class WebhookController {
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
   @Post('product/create')
   createByWebhook(@Body() dto: TAuditData) {
-    console.log('aaaaaa');
     return this.webhookService.createByWebhook(dto);
   }
 
