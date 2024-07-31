@@ -16,7 +16,13 @@ export class Product {
   picture: string | null;
 
   @Prop()
-  price: number;
+  priceRetail: number;
+
+  @Prop()
+  priceWholesale: number;
+
+  @Prop()
+  priceWildberries: number;
 
   @Prop()
   code: string;

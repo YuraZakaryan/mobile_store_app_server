@@ -16,6 +16,7 @@ import * as xlsx from 'xlsx';
 import { HttpService } from '@nestjs/axios';
 import { catchError, finalize, firstValueFrom } from 'rxjs';
 import { User } from '../user/user.schema';
+import { ERole } from '../user/dto/create-user.dto';
 
 @Injectable()
 export class ProductService {
@@ -35,7 +36,12 @@ export class ProductService {
     if (!category) {
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
     }
-    dto.price = Math.max(parseFloat(String(dto.price)), 0);
+    dto.priceRetail = Math.max(parseFloat(String(dto.priceRetail)), 0);
+    dto.priceWholesale = Math.max(parseFloat(String(dto.priceWholesale)), 0);
+    dto.priceWildberries = Math.max(
+      parseFloat(String(dto.priceWildberries)),
+      0,
+    );
     dto.count = Math.max(parseFloat(String(dto.count)), 0);
     dto.discount = Math.max(parseFloat(String(dto.discount)), 0);
 
@@ -549,7 +555,10 @@ export class ProductService {
     return product._id;
   }
 
-  async deleteByProductId(productId: string): Promise<Types.ObjectId> {
+  async deleteByProductId(
+    productId: string,
+    showError = false,
+  ): Promise<Types.ObjectId> {
     const product = await this.productModel.findOne({
       idProductByStock: productId,
     });
@@ -568,6 +577,10 @@ export class ProductService {
       return;
     }
 
+    if (deletedProduct.picture) {
+      this.fileService.removeFile(deletedProduct.picture, showError);
+    }
+
     await this.categoryModel.updateOne(
       { _id: product.category },
       { $pull: { products: product._id } },
@@ -576,15 +589,32 @@ export class ProductService {
     return product._id;
   }
 
-  async getOne(params: FindOneParams): Promise<Product> {
+  async getOne(params: FindOneParams, req: ReqUser): Promise<Product> {
     const id = params.id;
 
+    const userId = req.user.sub;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
     const product = await this.productModel.findById(id);
+
     if (!product) {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
+
+    if (user.role === ERole.USER) {
+      product.priceRetail = undefined;
+      product.priceWildberries = undefined;
+    } else if (user.role === ERole.SUPERUSER) {
+      product.priceWildberries = undefined;
+    }
     return product;
   }
+
   async fetchImageFromStock(imageHref: string, token: string) {
     const authorizationHeader = {
       Authorization: token,

@@ -32,7 +32,7 @@ export class FileService {
     }
   }
 
-  removeFile(filename: string) {
+  removeFile(filename: string, showError = true) {
     try {
       const filePath = path.resolve(__dirname, '..', '..', 'static', filename);
       if (fs.existsSync(filePath)) {
@@ -41,7 +41,11 @@ export class FileService {
       }
       return false;
     } catch (e) {
-      throw new HttpException(e.message, HttpStatus.INTERNAL_SERVER_ERROR);
+      if (showError) {
+        throw new HttpException(e.message, HttpStatus.INTERNAL_SERVER_ERROR);
+      } else {
+        console.log('Picture not found');
+      }
     }
   }
 }

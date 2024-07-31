@@ -5,7 +5,7 @@ import { Model, Types } from 'mongoose';
 import { OrderItem } from './schema/order-item.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Product } from '../product/product.schema';
-import { FindOneParams } from '../types';
+import { FindOneParams, ReqUser } from '../types';
 import { ChangeOrderStatusDto } from './dto/change-order-status.dto';
 import { ToOrderDto } from './dto/to-order.dto';
 import { TReturnItem } from '../user/types';

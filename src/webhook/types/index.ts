@@ -107,13 +107,11 @@ export type ProductInfoProps = {
     email: 'string';
   };
   shared: 'boolean';
-  salePrices: [
-    {
-      value: number;
-      currency: 'string';
-      priceType: 'string';
-    },
-  ];
+  salePrices: {
+    value: number;
+    currency: 'string';
+    priceType: 'string';
+  }[];
   minPrice: {
     value: number;
     currency: 'string';

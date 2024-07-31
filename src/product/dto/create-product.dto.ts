@@ -19,10 +19,24 @@ export class CreateProductDto {
 
   @ApiProperty({
     example: 50000,
-    description: 'product price',
+    description: 'product priceRetail',
   })
-  @IsNotEmpty({ message: 'price - is required' })
-  price: number;
+  @IsNotEmpty({ message: 'priceRetail - is required' })
+  priceRetail: number;
+
+  @ApiProperty({
+    example: 50000,
+    description: 'product priceWholesale',
+  })
+  @IsNotEmpty({ message: 'priceWholesale - is required' })
+  priceWholesale: number;
+
+  @ApiProperty({
+    example: 50000,
+    description: 'product priceWildberries',
+  })
+  @IsNotEmpty({ message: 'priceWildberries - is required' })
+  priceWildberries: number;
 
   @ApiProperty({
     example: 123456,

@@ -14,6 +14,7 @@ import { Model, Types } from 'mongoose';
 import { User } from '../user/user.schema';
 import { ProductService } from '../product/product.service';
 import { FileService, FileType } from '../file/file.service';
+import { priceWithoutLastTwoDigits } from '../utils/price';
 
 @Injectable()
 export class WebhookService {
@@ -79,7 +80,7 @@ export class WebhookService {
           code,
           salePrices,
           images,
-        } = productData.data;
+        } = productData.data as ProductInfoProps;
 
         let picturePath: string | null = null;
 
@@ -106,18 +107,20 @@ export class WebhookService {
           console.error('Error fetching image:', error);
         }
 
-        const price: number = salePrices[0].value;
-        const numWithoutLastTwoDigits: number =
-          price > 0 ? parseInt(price.toString().slice(0, -2)) : 0;
+        const priceRetail = priceWithoutLastTwoDigits(salePrices[0].value); // Մանրածախ
+        const priceWholesale = priceWithoutLastTwoDigits(salePrices[1].value); // Մեծածախ
+        const priceWildberries = priceWithoutLastTwoDigits(salePrices[2].value); // Wildberries
 
-        const existProduct = await this.productModel.findOne({ title: name });
+        const existProduct = await this.productModel.findOne({ code });
 
         if (!existProduct) {
           await this.productModel.create({
             title: name,
             information: description,
             code,
-            price: numWithoutLastTwoDigits,
+            priceRetail,
+            priceWholesale,
+            priceWildberries,
             count: 0,
             discount: 0,
             picture: picturePath,
@@ -209,15 +212,17 @@ export class WebhookService {
           console.error('Error fetching image:', error);
         }
 
-        const price: number = salePrices[0].value;
-        const numWithoutLastTwoDigits: number =
-          price > 0 ? parseInt(price.toString().slice(0, -2)) : 0;
+        const priceRetail = priceWithoutLastTwoDigits(salePrices[0].value); // Մանրածախ
+        const priceWholesale = priceWithoutLastTwoDigits(salePrices[1].value); // Մեծածախ
+        const priceWildberries = priceWithoutLastTwoDigits(salePrices[2].value); // Wildberries
 
         await this.productModel.findOneAndUpdate(
           { code },
           {
             title: name,
-            price: numWithoutLastTwoDigits,
+            priceRetail,
+            priceWholesale,
+            priceWildberries,
             picture: picturePath,
             code,
             information: description,
@@ -270,7 +275,7 @@ export class WebhookService {
           productData.data.rows[0].entity.meta.href.split('/');
         const productId = productHref[productHref.length - 1];
 
-        await this.productService.deleteByProductId(productId);
+        await this.productService.deleteByProductId(productId, false);
       });
   }
 }

@@ -193,6 +193,7 @@ export class ProductController {
     );
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get product' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
   @ApiResponse({
@@ -201,8 +202,11 @@ export class ProductController {
   })
   @ApiParam({ name: 'id' })
   @Get(':id')
-  getOne(@Param() params: FindOneParams): Promise<Product> {
-    return this.productService.getOne(params);
+  getOne(
+    @Param() params: FindOneParams,
+    @Req() req: ReqUser,
+  ): Promise<Product> {
+    return this.productService.getOne(params, req);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
