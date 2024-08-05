@@ -2,7 +2,9 @@ import { HttpService } from '@nestjs/axios';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { catchError, finalize, firstValueFrom } from 'rxjs';
+import { catchError, firstValueFrom } from 'rxjs';
+import { UserService } from 'src/user/user.service';
+import { formatDate } from 'src/utils/date';
 import { priceWithoutLastTwoDigits } from 'src/utils/price';
 import * as xlsx from 'xlsx';
 import { Category } from '../category/category.schema';
@@ -25,6 +27,7 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(Category.name) private categoryModel: Model<Category>,
     @InjectModel(User.name) private userModel: Model<User>,
+    private readonly userService: UserService,
     private fileService: FileService,
     private readonly httpService: HttpService,
   ) {}
@@ -409,15 +412,14 @@ export class ProductService {
           }
         }
 
-        const priceRetail = priceWithoutLastTwoDigits(
-          product.salePrices[0].value,
-        ); // Մանրածախ
-        const priceWholesale = priceWithoutLastTwoDigits(
-          product.salePrices[1].value,
-        ); // Մեծածախ
-        const priceWildberries = priceWithoutLastTwoDigits(
-          product.salePrices[2].value,
-        ); // Wildberries
+        const price = product.salePrices;
+
+        const priceRetail = priceWithoutLastTwoDigits(price[0].value); // Մանրածախ
+
+        const priceWholesale =
+          price.length > 1 ? priceWithoutLastTwoDigits(price[1].value) : 0; //Մեծածախ
+        const priceWildberries =
+          price.length > 2 ? priceWithoutLastTwoDigits(price[2].value) : 0; //Wildberries
 
         if (existingProduct) {
           await this.productModel.updateOne(
@@ -457,6 +459,42 @@ export class ProductService {
         'there_are_not_products_for_sync',
         HttpStatus.NOT_FOUND,
       );
+    }
+
+    console.log(
+      `Successfully synced: created ${createdCount} products, updated ${updatedCount} products`,
+    );
+
+    if (user && user.mail) {
+      const subject: string = `Ապրանքների սիխրոնիզացումը ավարտվեց`;
+      const storeName: string = 'MOBIART';
+      const currentTime: Date = new Date();
+
+      const html: string = `
+      <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
+      <div style="margin: 50px auto; width: 70%; padding: 20px 0">
+        <div style="border-bottom: 1px solid #eee">
+          <a href="" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600">${storeName}</a>
+        </div>
+        <div>
+            <p style="font-size: 1rem; font-weight: bold">Ստեղծվել է: <span style="font-weight: normal">${createdCount}</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Փոփոխվել է: <span style="font-weight: normal">${updatedCount}</span></p>
+              <p style="font-size: 1rem; font-weight: bold">Ընդհանուր: <span style="font-weight: normal">${
+                createdCount + updatedCount
+              }</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը ավարտվել է։ <span style="font-weight: normal">${formatDate(
+              currentTime,
+            )}</span></p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee" />
+        <div style="float: right; padding: 8px 0; color: #aaa; font-size: 0.8em; line-height: 1; font-weight: 300">
+          <p>${storeName} Inc</p>
+          <p>Armenia</p>
+        </div>
+      </div>
+    </div>
+      `;
+      await this.userService.sendToMail(user.mail, html, subject);
     }
 
     return {
@@ -665,9 +703,6 @@ export class ProductService {
           .pipe(
             catchError(() => {
               throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
-            }),
-            finalize((): void => {
-              console.log('Sync completed');
             }),
           ),
       );

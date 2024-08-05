@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
-import { UserController } from './user.controller';
-import { UserService } from './user.service';
-import { MongooseModule } from '@nestjs/mongoose';
-import { User, UserSchema } from './user.schema';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
 import { MAILER_PASSWORD, MAILER_USER } from '../constants';
+import { UserController } from './user.controller';
+import { User, UserSchema } from './user.schema';
+import { UserService } from './user.service';
 
 @Module({
   imports: [
@@ -21,5 +21,6 @@ import { MAILER_PASSWORD, MAILER_USER } from '../constants';
   ],
   controllers: [UserController],
   providers: [UserService],
+  exports: [UserModule, UserService],
 })
 export class UserModule {}
