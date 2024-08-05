@@ -1,22 +1,23 @@
+import { HttpService } from '@nestjs/axios';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Product } from './product.schema';
 import { Model, Types } from 'mongoose';
-import { FileService, FileType } from '../file/file.service';
-import { CreateProductDto } from './dto/create-product.dto';
+import { catchError, finalize, firstValueFrom } from 'rxjs';
+import { priceWithoutLastTwoDigits } from 'src/utils/price';
+import * as xlsx from 'xlsx';
 import { Category } from '../category/category.schema';
+import { FileService, FileType } from '../file/file.service';
 import {
   FindOneParams,
   ReqUser,
   TProductByDocumentData,
   TProductUpdateData,
 } from '../types';
-import { TReturnItem } from '../user/types';
-import * as xlsx from 'xlsx';
-import { HttpService } from '@nestjs/axios';
-import { catchError, finalize, firstValueFrom } from 'rxjs';
-import { User } from '../user/user.schema';
 import { ERole } from '../user/dto/create-user.dto';
+import { TReturnItem } from '../user/types';
+import { User } from '../user/user.schema';
+import { CreateProductDto } from './dto/create-product.dto';
+import { Product } from './product.schema';
 
 @Injectable()
 export class ProductService {
@@ -408,9 +409,15 @@ export class ProductService {
           }
         }
 
-        const price = product.salePrices?.[0]?.value
-          ? Number(product.salePrices[0].value.toString().slice(0, -2))
-          : 0;
+        const priceRetail = priceWithoutLastTwoDigits(
+          product.salePrices[0].value,
+        ); // Մանրածախ
+        const priceWholesale = priceWithoutLastTwoDigits(
+          product.salePrices[1].value,
+        ); // Մեծածախ
+        const priceWildberries = priceWithoutLastTwoDigits(
+          product.salePrices[2].value,
+        ); // Wildberries
 
         if (existingProduct) {
           await this.productModel.updateOne(
@@ -418,7 +425,9 @@ export class ProductService {
             {
               title: product.name,
               code: product.code,
-              price: price,
+              priceRetail,
+              priceWholesale,
+              priceWildberries,
               picture: picturePath,
               information: product.description,
             },
@@ -429,7 +438,9 @@ export class ProductService {
             title: product.name,
             code: product.code,
             count: 0,
-            price: price,
+            priceRetail,
+            priceWholesale,
+            priceWildberries,
             picture: picturePath || null,
             information: product.description || '',
             category: null,
