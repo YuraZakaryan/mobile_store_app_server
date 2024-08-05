@@ -512,7 +512,7 @@ export class ProductService {
         title: { $regex: new RegExp(title, 'i') },
         price: { $ne: 0 },
       })
-      .sort({ _id: -1 });
+      .sort({ picture: -1, _id: -1 });
 
     const totalItemsQuery = this.productModel.find({
       title: { $regex: new RegExp(title, 'i') },
@@ -560,7 +560,9 @@ export class ProductService {
       queryConditions.price = { $ne: 0 };
     }
 
-    const query = this.productModel.find(queryConditions).sort({ _id: -1 });
+    const query = this.productModel
+      .find(queryConditions)
+      .sort({ picture: -1, _id: -1 });
 
     const totalItemsQuery = this.productModel.find(queryConditions);
 
