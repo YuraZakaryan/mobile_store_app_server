@@ -4,6 +4,7 @@ import { IsEmail, IsEnum, IsNotEmpty, IsString, Length } from 'class-validator';
 export enum ERole {
   ADMIN = 'ADMIN',
   USER = 'USER',
+  SUPERUSER = 'SUPERUSER',
   MODERATOR = 'MODERATOR',
 }
 
