@@ -21,21 +21,21 @@ export class CreateProductDto {
     example: 50000,
     description: 'product priceRetail',
   })
-  @IsNotEmpty({ message: 'priceRetail - is required' })
+  // @IsNotEmpty({ message: 'priceRetail - is required' })
   priceRetail: number;
 
   @ApiProperty({
     example: 50000,
     description: 'product priceWholesale',
   })
-  @IsNotEmpty({ message: 'priceWholesale - is required' })
+  // @IsNotEmpty({ message: 'priceWholesale - is required' })
   priceWholesale: number;
 
   @ApiProperty({
     example: 50000,
     description: 'product priceWildberries',
   })
-  @IsNotEmpty({ message: 'priceWildberries - is required' })
+  // @IsNotEmpty({ message: 'priceWildberries - is required' })
   priceWildberries: number;
 
   @ApiProperty({
