@@ -30,6 +30,7 @@ export class CategoryService {
     return await this.categoryModel.create({
       ...dto,
       picture: picturePath,
+      keyword: '',
     });
   }
 
@@ -91,7 +92,7 @@ export class CategoryService {
 
     if (!products.length) {
       throw new HttpException(
-        'No products found with the given keyword',
+        'no_products_found_with_the_given_keyword',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -122,6 +123,7 @@ export class CategoryService {
       }),
     );
 
+    newCategory.keyword = dto.keyword;
     await newCategory.save();
 
     return {

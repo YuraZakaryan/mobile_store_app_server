@@ -15,6 +15,9 @@ export class Category {
   @Prop()
   picture: string;
 
+  @Prop()
+  keyword: string;
+
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }] })
   products: Types.ObjectId[];
 
