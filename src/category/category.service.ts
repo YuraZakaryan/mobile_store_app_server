@@ -98,7 +98,10 @@ export class CategoryService {
 
     await Promise.all(
       products.map(async (product) => {
-        if (product.category.toString() !== newCategoryId.toString()) {
+        if (
+          product.category &&
+          product.category.toString() !== newCategoryId.toString()
+        ) {
           const currentCategory = await this.categoryModel.findOneAndUpdate(
             { products: product._id },
             { $pull: { products: product._id } },
@@ -108,10 +111,10 @@ export class CategoryService {
           if (currentCategory) {
             await currentCategory.save();
           }
-
-          product.category = newCategoryId;
-          await product.save();
         }
+
+        product.category = newCategoryId;
+        await product.save();
 
         if (!newCategory.products.includes(product._id)) {
           newCategory.products.push(product._id);
