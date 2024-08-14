@@ -14,7 +14,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBody,
   ApiConsumes,
@@ -24,16 +24,17 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { CreateCategoryWithPictureDto } from './dto/create-category-with-picture.dto';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { Category } from './category.schema';
-import { CategoryService } from './category.service';
+import { Types } from 'mongoose';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/role/role.guard';
 import { Roles, UserRole } from '../guards/role/roles.decorator';
 import { FindOneParams } from '../types';
 import { TReturnItem } from '../user/types';
-import { Types } from 'mongoose';
+import { Category } from './category.schema';
+import { CategoryService } from './category.service';
+import { CreateCategoryWithPictureDto } from './dto/create-category-with-picture.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 
 @ApiTags('Category')
 @Controller('category')
@@ -93,6 +94,32 @@ export class CategoryController {
     @Body() dto: CreateCategoryDto,
   ): Promise<Category> {
     return this.categoryService.update(params, dto, picture);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @UsePipes(ValidationPipe)
+  @ApiOperation({ summary: 'Update Products Category By Keyword' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Products updated successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Category not found',
+  })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Access denied',
+  })
+  @ApiParam({ name: 'id' })
+  @Put('update-products-category-by-keyword/:id')
+  updateProductsCategoryByKeyword(
+    @Param() params: FindOneParams,
+    @Body() dto: UpdateProductCategoryDto,
+  ) {
+    return this.categoryService.updateProductsCategoryByKeyword(params, dto);
   }
 
   @ApiOperation({ summary: 'Get all categories' })

@@ -356,7 +356,7 @@ export class ProductService {
     const token: string = user.stockToken;
     const apiUrl: string =
       'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
-    const limit: number = 1000; // Максимальное количество сущностей за один запрос
+    const limit: number = 1000;
     let offset: number = 0;
 
     let updatedCount: number = 0;

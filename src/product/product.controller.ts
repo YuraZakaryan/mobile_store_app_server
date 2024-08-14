@@ -15,6 +15,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBody,
   ApiConsumes,
@@ -24,18 +25,17 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Types } from 'mongoose';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/role/role.guard';
 import { Roles, UserRole } from '../guards/role/roles.decorator';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductService } from './product.service';
-import { Product } from './product.schema';
-import { CreateProductWithPictureDto } from './dto/create-product-with-picture.dto';
 import { FindOneParams, ReqUser } from '../types';
 import { TReturnItem } from '../user/types';
-import { Types } from 'mongoose';
 import { CreateProductByDocumentDto } from './dto/create-product-by-document.dto';
+import { CreateProductWithPictureDto } from './dto/create-product-with-picture.dto';
+import { CreateProductDto } from './dto/create-product.dto';
+import { Product } from './product.schema';
+import { ProductService } from './product.service';
 
 @ApiTags('Product')
 @Controller('product')
