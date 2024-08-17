@@ -1,6 +1,6 @@
-import * as mongoose from 'mongoose';
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
+import * as mongoose from 'mongoose'
+import { HydratedDocument, Types } from 'mongoose'
 
 export type CategoryDocument = HydratedDocument<Category>;
 
@@ -17,6 +17,9 @@ export class Category {
 
   @Prop()
   keyword: string;
+
+  @Prop()
+  orderIndex: number;
 
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }] })
   products: Types.ObjectId[];

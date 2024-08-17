@@ -32,6 +32,12 @@
 $ npm install
 ```
 
+## Update categories to include orderIndex, you can run your command from the CLI:
+
+```bash
+npx ts-node dist/main.js update-categories
+```
+
 ## Running the app
 
 ```bash

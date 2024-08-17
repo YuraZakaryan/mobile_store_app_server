@@ -34,6 +34,7 @@ import { Category } from './category.schema';
 import { CategoryService } from './category.service';
 import { CreateCategoryWithPictureDto } from './dto/create-category-with-picture.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryOrder } from './dto/update-category-order.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 
 @ApiTags('Category')
@@ -120,6 +121,24 @@ export class CategoryController {
     @Body() dto: UpdateProductCategoryDto,
   ) {
     return this.categoryService.updateProductsCategoryByKeyword(params, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @UsePipes(ValidationPipe)
+  @ApiOperation({ summary: 'Update Categories orderIndex' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Categories updated successfully',
+  })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Access denied',
+  })
+  @Put('update-order-indexes')
+  updateOrderIndexes(@Body() dto: UpdateCategoryOrder) {
+    return this.categoryService.updateOrderIndexes(dto);
   }
 
   @ApiOperation({ summary: 'Get all categories' })

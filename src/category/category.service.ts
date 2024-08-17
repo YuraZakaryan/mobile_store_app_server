@@ -7,6 +7,7 @@ import { FindOneParams, TCategoryUpdateData } from '../types';
 import { TReturnItem } from '../user/types';
 import { Category } from './category.schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryOrder } from './dto/update-category-order.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 
 @Injectable()
@@ -27,10 +28,22 @@ export class CategoryService {
       FileType.IMAGE,
       picture,
     );
+
+    // Fetch the highest orderIndex value
+    const highestCategory = await this.categoryModel
+      .findOne({})
+      .sort({ orderIndex: -1 })
+      .exec();
+
+    // Determine the new orderIndex
+    const newOrderIndex = highestCategory ? highestCategory.orderIndex + 1 : 1;
+
+    // Create the new category with the new orderIndex
     return await this.categoryModel.create({
       ...dto,
       picture: picturePath,
       keyword: '',
+      orderIndex: newOrderIndex,
     });
   }
 
@@ -73,6 +86,45 @@ export class CategoryService {
     return this.categoryModel.findByIdAndUpdate(id, updateData, {
       new: true,
     });
+  }
+
+  async updateCategoriesWithOrderIndex(): Promise<void> {
+    // Fetch categories that do not have an orderIndex
+    const categoriesWithoutOrderIndex = await this.categoryModel
+      .find({ orderIndex: { $exists: false } })
+      .exec();
+
+    // If no categories are found, return early
+    if (categoriesWithoutOrderIndex.length === 0) return;
+
+    // Sort categories by title or another field if needed to ensure order
+    categoriesWithoutOrderIndex.sort((a, b) => a.title.localeCompare(b.title));
+
+    // Update each category with an orderIndex
+    for (let index = 0; index < categoriesWithoutOrderIndex.length; index++) {
+      await this.categoryModel.updateOne(
+        { _id: categoriesWithoutOrderIndex[index]._id },
+        { $set: { orderIndex: index + 1 } }, // Setting orderIndex starting from 1
+      );
+    }
+  }
+
+  async updateOrderIndexes(dto: UpdateCategoryOrder): Promise<string> {
+    const categories = dto.categories;
+
+    const operations = categories.map(({ _id, orderIndex }) => ({
+      updateOne: {
+        filter: { _id: new Types.ObjectId(_id) },
+        update: { $set: { orderIndex } },
+      },
+    }));
+
+    if (operations.length > 0) {
+      await this.categoryModel.bulkWrite(operations);
+      return 'Categories updated successfully';
+    }
+
+    return 'No categories updated';
   }
 
   async updateProductsCategoryByKeyword(
@@ -146,7 +198,7 @@ export class CategoryService {
     const query = this.categoryModel
       .find(queryConditions)
       .populate('products')
-      .sort({ _id: -1 });
+      .sort({ orderIndex: -1 });
 
     const totalItemsQuery = this.categoryModel.find(queryConditions);
 

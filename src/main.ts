@@ -1,9 +1,9 @@
-import * as process from 'process';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { json, urlencoded } from 'express';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
+import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
+import * as process from 'process';
+import { AppModule } from './app.module';
 const PORT = process.env.PORT || 4000;
 
 const start = async (): Promise<void> => {
@@ -25,5 +25,6 @@ const start = async (): Promise<void> => {
   await app.listen(PORT, '0.0.0.0', (): void => {
     console.log(`Server is started on ${PORT} port`);
   });
+  // await CommandFactory.run(AppModule);
 };
 start();
