@@ -197,7 +197,6 @@ export class CategoryService {
 
     const query = this.categoryModel
       .find(queryConditions)
-      .populate('products')
       .sort({ orderIndex: 1 });
 
     const totalItemsQuery = this.categoryModel.find(queryConditions);

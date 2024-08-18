@@ -136,7 +136,7 @@ export class CategoryController {
     status: HttpStatus.FORBIDDEN,
     description: 'Access denied',
   })
-  @Put('update-order-indexes')
+  @Post('update-order-indexes')
   updateOrderIndexes(@Body() dto: UpdateCategoryOrder) {
     return this.categoryService.updateOrderIndexes(dto);
   }
