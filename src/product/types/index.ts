@@ -1,3 +1,12 @@
+export * from './stores';
+
+export enum EImageAdd {
+  WITH_IMAGE = 'with_image',
+  WITHOUT_IMAGE = 'without_image',
+  WITH_IMAGE_FOR_EXIST = 'with_image_for_exist',
+  WITH_IMAGE_FOR_NEW = 'with_image_for_new',
+}
+
 export type TSyncMeta = {
   href: string;
   metadataHref: string;

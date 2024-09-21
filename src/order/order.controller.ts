@@ -8,7 +8,6 @@ import {
   Post,
   Put,
   Query,
-  Req,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -16,7 +15,7 @@ import {
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order } from './schema/order.schema';
-import { FindOneParams, ReqUser } from '../types';
+import { FindOneParams } from '../types';
 import {
   ApiOperation,
   ApiParam,

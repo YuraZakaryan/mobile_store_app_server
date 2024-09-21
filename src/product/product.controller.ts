@@ -34,8 +34,10 @@ import { TReturnItem } from '../user/types';
 import { CreateProductByDocumentDto } from './dto/create-product-by-document.dto';
 import { CreateProductWithPictureDto } from './dto/create-product-with-picture.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { GetStocksDto } from './dto/get-stocks.dto';
 import { Product } from './product.schema';
 import { ProductService } from './product.service';
+import { EImageAdd } from './types';
 
 @ApiTags('Product')
 @Controller('product')
@@ -112,9 +114,15 @@ export class ProductController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiQuery({
+    name: 'image',
+    type: String,
+    enum: EImageAdd,
+    required: false,
+  })
   @Get('sync')
-  sync(@Req() req: ReqUser) {
-    return this.productService.sync(req);
+  sync(@Req() req: ReqUser, @Query('image') image: EImageAdd) {
+    return this.productService.sync(req, image);
   }
 
   @ApiOperation({ summary: 'Search product by title' })
@@ -191,6 +199,28 @@ export class ProductController {
       discount,
       notActivated,
     );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get all Stocks with specific product count' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Product not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'User not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Invalid token',
+  })
+  @UsePipes(ValidationPipe)
+  @Post('stocks/withCount')
+  getAllStocksByProductIds(@Req() req: ReqUser, @Body() params: GetStocksDto) {
+    return this.productService.getAllStocksByProductIds(req, params);
   }
 
   @UseGuards(JwtAuthGuard)

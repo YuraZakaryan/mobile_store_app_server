@@ -2,7 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { catchError, firstValueFrom } from 'rxjs';
+import { catchError, firstValueFrom, map } from 'rxjs';
 import { UserService } from 'src/user/user.service';
 import { formatDate } from 'src/utils/date';
 import { priceWithoutLastTwoDigits } from 'src/utils/price';
@@ -19,7 +19,14 @@ import { ERole } from '../user/dto/create-user.dto';
 import { TReturnItem } from '../user/types';
 import { User } from '../user/user.schema';
 import { CreateProductDto } from './dto/create-product.dto';
+import { GetStocksDto } from './dto/get-stocks.dto';
 import { Product } from './product.schema';
+import {
+  EImageAdd,
+  TProductStocksResponse,
+  TStoresResponse,
+  TStoreWithStock,
+} from './types';
 
 @Injectable()
 export class ProductService {
@@ -243,105 +250,7 @@ export class ProductService {
     return updatedProduct.populate('author');
   }
 
-  // async sync(req: ReqUser) {
-  //   const userId: Types.ObjectId = req.user.sub;
-  //   const user = await this.userModel.findById(userId);
-  //
-  //   if (!user) {
-  //     throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-  //   }
-  //
-  //   if (!user.stockToken) {
-  //     throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-  //   }
-  //
-  //   const token: string = user.stockToken;
-  //   const apiUrl: string =
-  //     'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
-  //
-  //   let updatedCount: number = 0;
-  //   let createdCount: number = 0;
-  //
-  //   const { data } = await this.fetchProductsFromStock(apiUrl, token);
-  //   const { rows } = data;
-  //
-  //   for (const product of rows) {
-  //     const existingProduct = await this.productModel.findOne({
-  //       code: product.code,
-  //     });
-  //
-  //     const imageMetaHref = product.images?.meta?.href;
-  //     let picturePath: string | undefined;
-  //
-  //     if (imageMetaHref) {
-  //       const imageResponse = await this.fetchProductsFromStock(
-  //         imageMetaHref,
-  //         token,
-  //       );
-  //       const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
-  //
-  //       if (pictureHref) {
-  //         const pictureData = await this.fetchImageFromStock(
-  //           pictureHref,
-  //           token,
-  //         );
-  //         if (pictureData) {
-  //           if (existingProduct?.picture) {
-  //             this.fileService.removeFile(existingProduct.picture);
-  //           }
-  //           picturePath = await this.fileService.createFile(
-  //             FileType.IMAGE,
-  //             pictureData,
-  //           );
-  //         }
-  //       }
-  //     }
-  //
-  //     const price = product.salePrices?.[0]?.value
-  //       ? Number(product.salePrices[0].value.toString().slice(0, -2))
-  //       : 0;
-  //
-  //     if (existingProduct) {
-  //       await this.productModel.updateOne(
-  //         { code: existingProduct.code },
-  //         {
-  //           title: product.name,
-  //           code: product.code,
-  //           price: price,
-  //           picture: picturePath,
-  //           information: product.description,
-  //         },
-  //       );
-  //       updatedCount++;
-  //     } else {
-  //       await this.productModel.create({
-  //         title: product.name,
-  //         code: product.code,
-  //         count: 0,
-  //         price: price,
-  //         picture: picturePath || null,
-  //         information: product.description || '',
-  //         category: null,
-  //         discount: 0,
-  //         author: userId,
-  //       });
-  //       createdCount++;
-  //     }
-  //   }
-  //
-  //   if (createdCount === 0 && updatedCount === 0) {
-  //     throw new HttpException(
-  //       'there_are_not_products_for_sync',
-  //       HttpStatus.NOT_FOUND,
-  //     );
-  //   }
-  //
-  //   return {
-  //     message: `Successfully synced, created ${createdCount} and updated ${updatedCount} products`,
-  //   };
-  // }
-
-  async sync(req: ReqUser) {
+  async sync(req: ReqUser, image: EImageAdd = EImageAdd.WITH_IMAGE) {
     const userId: Types.ObjectId = req.user.sub;
     const user = await this.userModel.findById(userId);
 
@@ -363,6 +272,17 @@ export class ProductService {
     let createdCount: number = 0;
 
     let hasMore: boolean = true;
+    const startTime: Date = new Date();
+
+    const imageSyncTypeTranslatorObj = {
+      [EImageAdd.WITH_IMAGE]: 'Բոլորը',
+      [EImageAdd.WITHOUT_IMAGE]: 'Առանց նկար',
+      [EImageAdd.WITH_IMAGE_FOR_EXIST]: 'Միայն թարմանցման ապրանքների համար',
+      [EImageAdd.WITH_IMAGE_FOR_NEW]: 'Միայն նոր ապրանքների համար',
+    };
+
+    const imageSyncTypeTranslator =
+      imageSyncTypeTranslatorObj[image] || 'Բոլորը';
 
     while (hasMore) {
       const { data } = await this.fetchProductsFromStock(
@@ -386,7 +306,14 @@ export class ProductService {
         const imageMetaHref = product.images?.meta?.href;
         let picturePath: string | undefined;
 
-        if (imageMetaHref) {
+        const imageSyncConditions = {
+          [EImageAdd.WITH_IMAGE]: true,
+          [EImageAdd.WITH_IMAGE_FOR_EXIST]: existingProduct,
+          [EImageAdd.WITH_IMAGE_FOR_NEW]: !existingProduct,
+          [EImageAdd.WITHOUT_IMAGE]: false,
+        };
+
+        if (imageMetaHref && imageSyncConditions[image]) {
           const imageResponse = await this.fetchProductsFromStock(
             imageMetaHref,
             token,
@@ -421,6 +348,8 @@ export class ProductService {
         const priceWildberries =
           price.length > 2 ? priceWithoutLastTwoDigits(price[2].value) : 0; //Wildberries
 
+        const parsedCount = product.stock ? Math.trunc(product.stock) : 0;
+
         if (existingProduct) {
           await this.productModel.updateOne(
             { code: existingProduct.code },
@@ -430,16 +359,19 @@ export class ProductService {
               priceRetail,
               priceWholesale,
               priceWildberries,
+              count: parsedCount,
               picture: picturePath,
+              idProductByStock: product.id,
               information: product.description,
             },
           );
           updatedCount++;
         } else {
           await this.productModel.create({
+            idProductByStock: product.id,
             title: product.name,
             code: product.code,
-            count: 0,
+            count: parsedCount,
             priceRetail,
             priceWholesale,
             priceWildberries,
@@ -482,6 +414,10 @@ export class ProductService {
               <p style="font-size: 1rem; font-weight: bold">Ընդհանուր: <span style="font-weight: normal">${
                 createdCount + updatedCount
               }</span></p>
+               <p style="font-size: 1rem; font-weight: bold">Նկարների սիխրոնիզացման տեսակը։ <span style="font-weight: normal">${imageSyncTypeTranslator}</span></p>
+            <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը սկսվել է։ <span style="font-weight: normal">${formatDate(
+              startTime,
+            )}</span></p>
             <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը ավարտվել է։ <span style="font-weight: normal">${formatDate(
               currentTime,
             )}</span></p>
@@ -578,6 +514,112 @@ export class ProductService {
       total_items: totalItems,
       items: products,
     };
+  }
+
+  async getAllStocksByProductIds(req: ReqUser, dto: GetStocksDto) {
+    const productIds = dto.ids;
+    const userId: Types.ObjectId = req.user.sub;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    if (!user.stockToken) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    const token: string = user.stockToken;
+    const storeApiUrl = 'https://api.moysklad.ru/api/remap/1.2/entity/store';
+    const authorizationHeader = {
+      Authorization: `Bearer ${token}`,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const storesResponse: TStoresResponse = await firstValueFrom(
+        this.httpService
+          .get(storeApiUrl, { headers: authorizationHeader })
+          .pipe(
+            map((response) => response.data),
+            catchError(() => {
+              throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+            }),
+          ),
+      );
+
+      const result = await Promise.all(
+        productIds.map(async (productId) => {
+          const product = await this.productModel.findById(productId);
+
+          if (!product) {
+            throw new HttpException(
+              `Product with ID ${productId} not found`,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+
+          const stockApiUrl = `https://api.moysklad.ru/api/remap/1.2/report/stock/bystore?filter=product=https://api.moysklad.ru/api/remap/1.2/entity/product/${product.idProductByStock}`;
+
+          const productStocksResponse: TProductStocksResponse =
+            await firstValueFrom(
+              this.httpService
+                .get(stockApiUrl, { headers: authorizationHeader })
+                .pipe(
+                  map((response) => response.data),
+                  catchError(() => {
+                    throw new HttpException(
+                      'invalid_token',
+                      HttpStatus.FORBIDDEN,
+                    );
+                  }),
+                ),
+            );
+
+          const stocks: TStoreWithStock[] = storesResponse.rows
+            .map((store) => {
+              const productStock = productStocksResponse.rows.find((stock) =>
+                stock.stockByStore.some((s) => s.meta.href === store.meta.href),
+              );
+
+              const storeStock = productStock
+                ? productStock.stockByStore.find(
+                    (s) => s.meta.href === store.meta.href,
+                  )
+                : null;
+
+              const count = storeStock ? storeStock.stock : 0;
+
+              return {
+                id: store.id,
+                name: store.name,
+                pathName: store.pathName,
+                code: store.code,
+                address: store.address,
+                externalCode: store.externalCode,
+                count,
+              };
+            })
+            .filter((store) => store.pathName && store.count > 0);
+
+          return {
+            name: product.title,
+            id: productId,
+            code: product.code,
+            stocks,
+          };
+        }),
+      );
+
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'error_fetching_stocks_with_count',
+        HttpStatus.FORBIDDEN,
+      );
+    }
   }
 
   async delete(params: FindOneParams): Promise<Types.ObjectId> {

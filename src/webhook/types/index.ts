@@ -137,6 +137,10 @@ export type ProductInfoProps = {
       offset: number;
     };
   };
+  stock: number;
+  reserve: number;
+  inTransit: number;
+  quantity: number;
   files: {
     href: 'string';
   };

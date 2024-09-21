@@ -1,10 +1,10 @@
 import { IsMongoId } from 'class-validator';
 import { Types } from 'mongoose';
-import { User } from '../user/user.schema';
 import { MeDto } from '../auth/dto/me-dto';
 import { OrderItem } from '../order/schema/order-item.schema';
-import { Product } from '../product/product.schema';
 import { Order } from '../order/schema/order.schema';
+import { Product } from '../product/product.schema';
+import { User } from '../user/user.schema';
 
 export class FindOneParams {
   @IsMongoId({ message: 'id - Invalid ID format' })

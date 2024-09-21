@@ -1,20 +1,20 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { AxiosResponse } from 'axios';
+import { Model, Types } from 'mongoose';
+import { catchError, switchMap, throwError } from 'rxjs';
+import { FileService, FileType } from '../file/file.service';
+import { Product } from '../product/product.schema';
+import { ProductService } from '../product/product.service';
+import { User } from '../user/user.schema';
+import { priceWithoutLastTwoDigits } from '../utils/price';
 import {
   AuditLogProps,
   AuditLogResponse,
   ProductInfoProps,
   TAuditData,
 } from './types';
-import { AxiosResponse } from 'axios';
-import { catchError, switchMap, throwError } from 'rxjs';
-import { InjectModel } from '@nestjs/mongoose';
-import { Product } from '../product/product.schema';
-import { Model, Types } from 'mongoose';
-import { User } from '../user/user.schema';
-import { ProductService } from '../product/product.service';
-import { FileService, FileType } from '../file/file.service';
-import { priceWithoutLastTwoDigits } from '../utils/price';
 
 @Injectable()
 export class WebhookService {
@@ -79,6 +79,7 @@ export class WebhookService {
           description,
           code,
           salePrices,
+          stock,
           images,
         } = productData.data as ProductInfoProps;
 
@@ -111,6 +112,8 @@ export class WebhookService {
         const priceWholesale = priceWithoutLastTwoDigits(salePrices[1].value); // Մեծածախ
         const priceWildberries = priceWithoutLastTwoDigits(salePrices[2].value); // Wildberries
 
+        const parsedCount = stock ? Math.trunc(stock) : 0;
+
         const existProduct = await this.productModel.findOne({ code });
 
         if (!existProduct) {
@@ -121,7 +124,7 @@ export class WebhookService {
             priceRetail,
             priceWholesale,
             priceWildberries,
-            count: 0,
+            count: parsedCount,
             discount: 0,
             picture: picturePath,
             category: null,
@@ -179,7 +182,7 @@ export class WebhookService {
         }),
       )
       .subscribe(async (productData: AxiosResponse<ProductInfoProps>) => {
-        const { name, description, code, salePrices, images } =
+        const { name, description, code, salePrices, stock, images } =
           productData.data;
 
         const existProduct = await this.productModel.findOne({ code });
@@ -216,6 +219,8 @@ export class WebhookService {
         const priceWholesale = priceWithoutLastTwoDigits(salePrices[1].value); // Մեծածախ
         const priceWildberries = priceWithoutLastTwoDigits(salePrices[2].value); // Wildberries
 
+        const parsedCount = stock ? Math.trunc(stock) : 0;
+
         await this.productModel.findOneAndUpdate(
           { code },
           {
@@ -223,6 +228,7 @@ export class WebhookService {
             priceRetail,
             priceWholesale,
             priceWildberries,
+            count: parsedCount,
             picture: picturePath,
             code,
             information: description,
