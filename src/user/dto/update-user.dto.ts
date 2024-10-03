@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsNotEmpty, IsString, Length } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  Length,
+} from 'class-validator';
+import { EPriceType } from './create-user.dto';
 
 export enum ERole {
   ADMIN = 'ADMIN',
@@ -50,6 +58,19 @@ export class UpdateUserDto {
   @Length(9, 9, { message: 'phone length should be 9 characters' })
   @IsNotEmpty({ message: 'phone is required' })
   readonly phone: string;
+
+  @ApiProperty({
+    example: EPriceType,
+    description: 'price type',
+  })
+  @IsString({ message: 'price type must be string' })
+  @IsEnum(EPriceType)
+  @IsNotEmpty({ message: 'price type is required' })
+  readonly priceType: string;
+
+  @ApiProperty({ example: '10', description: 'Discount in percent' })
+  @IsNumber({}, { message: 'discount in percent must be a number' })
+  discountPercent: number;
 
   @ApiProperty({ example: 'USER', description: 'role', required: false })
   @IsString({ message: 'role must be string' })

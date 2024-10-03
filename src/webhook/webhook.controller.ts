@@ -1,7 +1,7 @@
 import { Body, Controller, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { WebhookService } from './webhook.service';
 import { TAuditData } from './types';
+import { WebhookService } from './webhook.service';
 
 @Controller('webhook')
 export class WebhookController {

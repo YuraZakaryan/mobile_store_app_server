@@ -1,15 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { UserModule } from './user/user.module';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import * as path from 'path';
+import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { CategoryModule } from './category/category.module';
 import { FileModule } from './file/file.module';
-import { ProductModule } from './product/product.module';
 import { OrderModule } from './order/order.module';
-import * as path from 'path';
-import { AppController } from './app.controller';
+import { ProductModule } from './product/product.module';
+import { ReservationCounterModule } from './reservation-counter/reservation-counter.module';
+import { UserModule } from './user/user.module';
 import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
@@ -20,6 +22,7 @@ import { WebhookModule } from './webhook/webhook.module';
     ServeStaticModule.forRoot({
       rootPath: path.resolve(__dirname, '..', 'static'),
     }),
+    ScheduleModule.forRoot(),
     MongooseModule.forRoot('mongodb://localhost:27017/mobiart'),
     UserModule,
     AuthModule,
@@ -28,6 +31,7 @@ import { WebhookModule } from './webhook/webhook.module';
     ProductModule,
     OrderModule,
     WebhookModule,
+    ReservationCounterModule,
   ],
   controllers: [AppController],
 })

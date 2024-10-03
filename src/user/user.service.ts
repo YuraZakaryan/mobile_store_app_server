@@ -1,19 +1,21 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { User } from './user.schema';
-import { Model, Types } from 'mongoose';
-import { CreateUserDto } from './dto/create-user.dto';
-import { FindOneParams } from '../types';
-import { JwtService } from '@nestjs/jwt';
-import { TReturnItem } from './types';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdatePasswordDto } from './dto/update-password.dto';
-import * as bcrypt from 'bcryptjs';
-import { EXPIRE_TIME_REFRESH, MAILER_USER } from 'src/constants';
 import { MailerService } from '@nestjs-modules/mailer';
-import { SendOtpDto } from './dto/send-otp.dto';
+import { HttpService } from '@nestjs/axios';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import * as bcrypt from 'bcryptjs';
+import { Model, Types } from 'mongoose';
+import { catchError, firstValueFrom } from 'rxjs';
+import { EXPIRE_TIME_REFRESH, MAILER_USER } from 'src/constants';
+import { FindOneParams, ReqUser } from '../types';
 import { ConfirmOtpDto } from './dto/confirm-otp.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { TCounterParty, TReturnItem } from './types';
+import { User } from './user.schema';
 
 @Injectable()
 export class UserService {
@@ -21,6 +23,7 @@ export class UserService {
     @InjectModel(User.name) private userModel: Model<User>,
     private mailerService: MailerService,
     private jwtService: JwtService,
+    private readonly httpService: HttpService,
   ) {}
 
   async create(dto: CreateUserDto) {
@@ -164,6 +167,8 @@ export class UserService {
         mail: dto.mail,
         phone: dto.phone,
         address: dto.address,
+        priceType: dto.priceType,
+        discountPercent: dto.discountPercent,
         confirmed: dto.confirmed,
         stockToken: dto.stockToken,
         role: dto.role,
@@ -354,6 +359,146 @@ export class UserService {
       };
     }
   }
+
+  async getAllFromCounterparties(
+    req: ReqUser,
+    name: string,
+    limit: number,
+    skip: number,
+  ) {
+    const userId: Types.ObjectId = req.user.sub;
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    if (!user.stockToken) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    const token: string = user.stockToken;
+    const apiUrl: string = `https://api.moysklad.ru/api/remap/1.2/entity/counterparty`;
+
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    const params: {
+      limit: number;
+      offset: number;
+      tags: string;
+      filter?: string;
+    } = {
+      limit,
+      offset: skip,
+      tags: 'գնորդներ',
+    };
+
+    if (name && name.trim() !== '') {
+      params.filter = `name~${name}`;
+    }
+
+    try {
+      // Extract totalItems from response.data.meta.size
+      const response = await firstValueFrom(
+        this.httpService
+          .get(apiUrl, {
+            headers: authorizationHeader,
+            params,
+          })
+          .pipe(
+            catchError(() => {
+              throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+            }),
+          ),
+      );
+
+      const counterparties: TCounterParty[] = response.data.rows;
+      const totalItems: number = response.data.meta.size;
+
+      const modifiedCounterparties = counterparties.map(
+        (counterparty: TCounterParty) => ({
+          id: counterparty.id,
+          name: counterparty.name,
+          phone: counterparty.phone,
+          code: counterparty.code,
+        }),
+      );
+
+      // Return the modified counterparties and totalItems
+      return {
+        items: modifiedCounterparties,
+        total_items: totalItems,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'error_fetching_counterparties_from_stock',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getOneCounterpartyById(req: ReqUser, id: string) {
+    const userId: Types.ObjectId = req.user.sub;
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    if (!user.stockToken) {
+      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    if (!id) {
+      throw new HttpException(
+        'counterparty_id_is_not_specified',
+        HttpStatus.EXPECTATION_FAILED,
+      );
+    }
+
+    const token: string = user.stockToken;
+    const apiUrl: string = `https://api.moysklad.ru/api/remap/1.2/entity/counterparty/${id}`;
+
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(apiUrl, { headers: authorizationHeader }).pipe(
+          catchError((error) => {
+            const statusCode =
+              error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+
+            throw new HttpException(
+              statusCode == 401 ? 'invalid_token' : 'counterparty_not_found',
+              HttpStatus.FORBIDDEN,
+            );
+          }),
+        ),
+      );
+
+      const { data } = response;
+      return {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        code: data.code,
+        salePrices: data.salePrices,
+        stock: data.stock,
+        images: data.images,
+      };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   otpUpdater() {
     const otp: number = Math.floor(1000 + Math.random() * 9000);
     const second: number = 1000;

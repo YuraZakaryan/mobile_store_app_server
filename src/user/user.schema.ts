@@ -1,6 +1,7 @@
-import * as mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import * as mongoose from 'mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { EPriceType } from './dto/create-user.dto';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -29,6 +30,12 @@ export class User {
 
   @Prop()
   phone: string;
+
+  @Prop()
+  priceType: EPriceType;
+
+  @Prop({ default: 0 })
+  discountPercent: number;
 
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Basket' }] })
   basket: Array<Types.ObjectId>;

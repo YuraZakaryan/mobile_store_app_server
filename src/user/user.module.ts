@@ -1,4 +1,5 @@
 import { MailerModule } from '@nestjs-modules/mailer';
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MAILER_PASSWORD, MAILER_USER } from '../constants';
@@ -18,6 +19,7 @@ import { UserService } from './user.service';
         },
       },
     }),
+    HttpModule,
   ],
   controllers: [UserController],
   providers: [UserService],

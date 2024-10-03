@@ -3,6 +3,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { catchError, firstValueFrom, map } from 'rxjs';
+import { ReservationCounter } from 'src/reservation-counter/reservationCounter.schema';
 import { UserService } from 'src/user/user.service';
 import { formatDate } from 'src/utils/date';
 import { priceWithoutLastTwoDigits } from 'src/utils/price';
@@ -34,6 +35,8 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(Category.name) private categoryModel: Model<Category>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(ReservationCounter.name)
+    private reservationCounterModel: Model<ReservationCounter>,
     private readonly userService: UserService,
     private fileService: FileService,
     private readonly httpService: HttpService,
@@ -445,14 +448,18 @@ export class ProductService {
   ): Promise<TReturnItem<Product[]>> {
     const query = this.productModel
       .find({
-        title: { $regex: new RegExp(title, 'i') },
-        price: { $ne: 0 },
+        $or: [
+          { title: { $regex: new RegExp(title, 'i') }, price: { $ne: 0 } },
+          { code: title, price: { $ne: 0 } },
+        ],
       })
-      .sort({ picture: -1, _id: -1 });
+      .sort({ count: -1, picture: -1, _id: -1 });
 
     const totalItemsQuery = this.productModel.find({
-      title: { $regex: new RegExp(title, 'i') },
-      price: { $ne: 0 },
+      $or: [
+        { title: { $regex: new RegExp(title, 'i') }, price: { $ne: 0 } },
+        { code: title, price: { $ne: 0 } },
+      ],
     });
 
     const totalItems = await totalItemsQuery.countDocuments().exec();
@@ -498,7 +505,7 @@ export class ProductService {
 
     const query = this.productModel
       .find(queryConditions)
-      .sort({ picture: -1, _id: -1 });
+      .sort({ count: -1, picture: -1, _id: -1 });
 
     const totalItemsQuery = this.productModel.find(queryConditions);
 
@@ -602,7 +609,8 @@ export class ProductService {
                 count,
               };
             })
-            .filter((store) => store.pathName && store.count > 0);
+            // .filter((store) => store.pathName && store.count > 0);
+            .filter((store) => store.pathName);
 
           return {
             name: product.title,
@@ -699,13 +707,20 @@ export class ProductService {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
 
+    const productQuantityDetails = await this.getProductQuantityDetails(
+      product._id,
+    );
+
     if (user.role === ERole.USER) {
       product.priceRetail = undefined;
       product.priceWildberries = undefined;
     } else if (user.role === ERole.SUPERUSER) {
       product.priceWildberries = undefined;
     }
-    return product;
+    return {
+      ...product.toObject(),
+      count: productQuantityDetails.availableQuantity,
+    };
   }
 
   async fetchImageFromStock(imageHref: string, token: string) {
@@ -756,5 +771,27 @@ export class ProductService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+  async getProductQuantityDetails(productId: Types.ObjectId) {
+    const product = await this.productModel.findById(productId);
+
+    if (!product) {
+      throw new HttpException('product_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    const reservations = await this.reservationCounterModel.find({
+      product: productId,
+    });
+
+    const totalReservedQuantity = reservations.reduce((total, reservation) => {
+      return total + reservation.quantity;
+    }, 0);
+
+    const availableQuantity = product.count - totalReservedQuantity;
+
+    return {
+      currentCount: product.count,
+      availableQuantity: availableQuantity >= 0 ? availableQuantity : 0,
+    };
   }
 }

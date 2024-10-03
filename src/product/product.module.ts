@@ -1,6 +1,10 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  ReservationCounter,
+  ReservationCounterSchema,
+} from 'src/reservation-counter/reservationCounter.schema';
 import { UserModule } from 'src/user/user.module';
 import { Category, CategorySchema } from '../category/category.schema';
 import { FileService } from '../file/file.service';
@@ -18,6 +22,7 @@ import { ProductService } from './product.service';
         name: Category.name,
         schema: CategorySchema,
       },
+      { name: ReservationCounter.name, schema: ReservationCounterSchema },
     ]),
     UserModule,
     HttpModule,

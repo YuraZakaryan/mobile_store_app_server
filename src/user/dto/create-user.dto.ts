@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsString,
   Length,
   Matches,
@@ -13,6 +14,11 @@ export enum ERole {
   USER = 'USER',
   SUPERUSER = 'SUPERUSER',
   MODERATOR = 'MODERATOR',
+}
+
+export enum EPriceType {
+  RETAIL = 'RETAIL',
+  WHOLESALE = 'WHOLESALE',
 }
 
 export class CreateUserDto {
@@ -63,6 +69,19 @@ export class CreateUserDto {
   @Length(9, 9, { message: 'phone length should be 9 characters' })
   @IsNotEmpty({ message: 'phone is required' })
   readonly phone: string;
+
+  @ApiProperty({
+    example: EPriceType,
+    description: 'price type',
+  })
+  @IsString({ message: 'price type must be string' })
+  @IsEnum(EPriceType)
+  @IsNotEmpty({ message: 'price type is required' })
+  readonly priceType: string;
+
+  @ApiProperty({ example: '10', description: 'Discount in percent' })
+  @IsNumber({}, { message: 'discount in percent must be a number' })
+  discountPercent: number;
 
   @ApiProperty({ example: 'USER', description: 'role', required: false })
   @IsString({ message: 'role must be string' })

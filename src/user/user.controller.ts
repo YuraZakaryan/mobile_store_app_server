@@ -8,13 +8,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { UserService } from './user.service';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { User } from './user.schema';
 import {
   ApiConsumes,
   ApiOperation,
@@ -24,16 +22,19 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Types } from 'mongoose';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/role/role.guard';
 import { Roles, UserRole } from '../guards/role/roles.decorator';
-import { TReturnItem } from './types';
-import { FindOneParams } from '../types';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdatePasswordDto } from './dto/update-password.dto';
-import { Types } from 'mongoose';
-import { SendOtpDto } from './dto/send-otp.dto';
+import { FindOneParams, ReqUser } from '../types';
 import { ConfirmOtpDto } from './dto/confirm-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { TReturnItem } from './types';
+import { User } from './user.schema';
+import { UserService } from './user.service';
 
 @ApiTags('User')
 @Controller('user')
@@ -88,6 +89,52 @@ export class UserController {
     @Query('banned') banned?: boolean,
   ): Promise<TReturnItem<User[]>> {
     return this.userService.getAll(name, limit, skip, confirmed, banned);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get all counterparties from stock' })
+  @ApiQuery({
+    name: 'name',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'skip',
+    required: false,
+  })
+  @Get('counterparties/all')
+  async getAllFromCounterparties(
+    @Req() req: ReqUser,
+    @Query('name') name?: string,
+    @Query('limit') limit?: number,
+    @Query('skip') skip?: number,
+  ) {
+    return this.userService.getAllFromCounterparties(req, name, limit, skip);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get one counterparty from stock by id' })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid token',
+  })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Access denied',
+  })
+  @ApiQuery({
+    name: 'id',
+    required: true,
+  })
+  @Get('counterparty')
+  async getOneCounterpartyById(@Req() req: ReqUser, @Query('id') id: string) {
+    return this.userService.getOneCounterpartyById(req, id);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -26,17 +26,17 @@ export class WebhookService {
     private readonly productService: ProductService,
   ) {}
   async createByWebhook(dto: TAuditData): Promise<void> {
-    const admin = await this.userModel.find({
-      role: 'ADMIN',
+    const admin = await this.userModel.findOne({
+      username: 'mobiartadmin',
     });
 
     if (!admin) {
       throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
     }
 
-    const id: Types.ObjectId = admin[0]._id;
+    const id: Types.ObjectId = admin._id;
 
-    const token: string = admin[0].stockToken;
+    const token: string = admin.stockToken;
 
     if (!token) {
       throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
@@ -61,6 +61,10 @@ export class WebhookService {
             { headers: authorizationHeader },
           ),
         ),
+        catchError((error) => {
+          console.error('Error fetching audit log:', error);
+          return throwError(() => error);
+        }),
         switchMap((auditLogResponse: AxiosResponse<AuditLogResponse>) =>
           this.httpService.get<ProductInfoProps>(
             auditLogResponse.data.rows[0].entity.meta.href,
@@ -137,15 +141,15 @@ export class WebhookService {
   }
 
   async updateByWebhook(dto: TAuditData) {
-    const admin = await this.userModel.find({
-      role: 'ADMIN',
+    const admin = await this.userModel.findOne({
+      username: 'mobiartadmin',
     });
 
     if (!admin) {
       throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
     }
 
-    const token: string = admin[0].stockToken;
+    const token: string = admin.stockToken;
 
     if (!token) {
       throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
@@ -161,7 +165,6 @@ export class WebhookService {
       .get<AuditLogProps>(auditHref, { headers: authorizationHeader })
       .pipe(
         catchError((error) => {
-          console.error('Error fetching audit log:', error);
           return throwError(() => error);
         }),
         switchMap((auditData: AxiosResponse<AuditLogProps>) =>
@@ -170,6 +173,9 @@ export class WebhookService {
             { headers: authorizationHeader },
           ),
         ),
+        catchError((error) => {
+          return throwError(() => error);
+        }),
         switchMap((auditLogResponse: AxiosResponse<AuditLogResponse>) =>
           this.httpService.get<ProductInfoProps>(
             auditLogResponse.data.rows[0].entity.meta.href,
@@ -177,7 +183,6 @@ export class WebhookService {
           ),
         ),
         catchError((error) => {
-          console.error('Error fetching product info:', error);
           return throwError(() => error);
         }),
       )
@@ -238,15 +243,15 @@ export class WebhookService {
   }
 
   async deleteByWebhook(dto: TAuditData) {
-    const admin = await this.userModel.find({
-      role: 'ADMIN',
+    const admin = await this.userModel.findOne({
+      username: 'mobiartadmin',
     });
 
     if (!admin) {
       throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
     }
 
-    const token: string = admin[0].stockToken;
+    const token: string = admin.stockToken;
 
     if (!token) {
       throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);

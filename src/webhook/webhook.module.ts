@@ -1,6 +1,10 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  ReservationCounter,
+  ReservationCounterSchema,
+} from 'src/reservation-counter/reservationCounter.schema';
 import { UserModule } from 'src/user/user.module';
 import { Category, CategorySchema } from '../category/category.schema';
 import { FileService } from '../file/file.service';
@@ -17,6 +21,7 @@ import { WebhookService } from './webhook.service';
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },
       { name: User.name, schema: UserSchema },
+      { name: ReservationCounter.name, schema: ReservationCounterSchema },
       {
         name: Category.name,
         schema: CategorySchema,
