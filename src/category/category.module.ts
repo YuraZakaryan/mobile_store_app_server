@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { FileService } from '../file/file.service';
+import { FileModule } from 'src/file/file.module';
 import { Product, ProductSchema } from '../product/product.schema';
 import { CategoryController } from './category.controller';
 import { Category, CategorySchema } from './category.schema';
@@ -13,8 +13,9 @@ import { UpdateCategoriesCommand } from './update-categories.command';
       { name: Category.name, schema: CategorySchema },
       { name: Product.name, schema: ProductSchema },
     ]),
+    FileModule,
   ],
   controllers: [CategoryController],
-  providers: [CategoryService, UpdateCategoriesCommand, FileService],
+  providers: [CategoryService, UpdateCategoriesCommand],
 })
 export class CategoryModule {}

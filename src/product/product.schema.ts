@@ -33,6 +33,9 @@ export class Product {
   @Prop()
   count: number;
 
+  @Prop()
+  totalReserved: number;
+
   @Prop([{ type: mongoose.Schema.Types.ObjectId, ref: 'ReservationCounter' }])
   reservations: Types.ObjectId[];
 

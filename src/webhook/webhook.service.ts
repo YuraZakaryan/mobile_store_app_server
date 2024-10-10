@@ -1,9 +1,13 @@
 import { HttpService } from '@nestjs/axios';
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { AxiosResponse } from 'axios';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { catchError, switchMap, throwError } from 'rxjs';
+import { OrderService } from 'src/order/order.service';
+import { EOrderStatus } from 'src/order/schema/order.schema';
+import { ReservationCounterService } from 'src/reservation-counter/reservation-counter.service';
+import { UserService } from 'src/user/user.service';
 import { FileService, FileType } from '../file/file.service';
 import { Product } from '../product/product.schema';
 import { ProductService } from '../product/product.service';
@@ -24,23 +28,12 @@ export class WebhookService {
     private readonly httpService: HttpService,
     private readonly fileService: FileService,
     private readonly productService: ProductService,
+    private readonly orderService: OrderService,
+    private readonly userService: UserService,
+    private readonly reservationCounterService: ReservationCounterService,
   ) {}
   async createByWebhook(dto: TAuditData): Promise<void> {
-    const admin = await this.userModel.findOne({
-      username: 'mobiartadmin',
-    });
-
-    if (!admin) {
-      throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
-    }
-
-    const id: Types.ObjectId = admin._id;
-
-    const token: string = admin.stockToken;
-
-    if (!token) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
+    const { _id, token } = await this.userService.getMainAdminInfo();
 
     const authorizationHeader = {
       Authorization: token || '',
@@ -132,7 +125,7 @@ export class WebhookService {
             discount: 0,
             picture: picturePath,
             category: null,
-            author: id,
+            author: _id,
             productId,
             idProductByStock: productId,
           });
@@ -141,19 +134,7 @@ export class WebhookService {
   }
 
   async updateByWebhook(dto: TAuditData) {
-    const admin = await this.userModel.findOne({
-      username: 'mobiartadmin',
-    });
-
-    if (!admin) {
-      throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
-    }
-
-    const token: string = admin.stockToken;
-
-    if (!token) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
+    const { token } = await this.userService.getMainAdminInfo();
 
     const authorizationHeader = {
       Authorization: token || '',
@@ -243,19 +224,7 @@ export class WebhookService {
   }
 
   async deleteByWebhook(dto: TAuditData) {
-    const admin = await this.userModel.findOne({
-      username: 'mobiartadmin',
-    });
-
-    if (!admin) {
-      throw new HttpException('Not found admin user', HttpStatus.NOT_FOUND);
-    }
-
-    const token: string = admin.stockToken;
-
-    if (!token) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
+    const { token } = await this.userService.getMainAdminInfo();
 
     const auditHref: string = dto.auditContext.meta.href;
 
@@ -287,6 +256,56 @@ export class WebhookService {
         const productId = productHref[productHref.length - 1];
 
         await this.productService.deleteByProductId(productId, false);
+      });
+  }
+
+  async getCustomOrderInfoByWebhook(dto: TAuditData) {
+    const { token } = await this.userService.getMainAdminInfo();
+
+    const auditHref: string = dto.auditContext.meta.href + '/events';
+
+    const authorizationHeader = {
+      Authorization: token || '',
+    };
+
+    this.httpService
+      .get<AuditLogProps>(auditHref, { headers: authorizationHeader })
+      .pipe(
+        catchError((error) => {
+          console.error('Error fetching audit log:', error);
+          return throwError(() => error);
+        }),
+      )
+      .subscribe(async (customOrderData: any) => {
+        const { entity, eventType } = customOrderData.data.rows[0];
+
+        const productHref = entity.meta.href.split('/');
+        const orderId = productHref[productHref.length - 1];
+
+        if (!orderId) {
+          console.warn('Stock order id not found');
+          return null;
+        }
+        const order = await this.orderService.getOrderByStockOrderId(orderId);
+
+        if (order) {
+          switch (eventType) {
+            case 'delete':
+              order.status = EOrderStatus.REJECTED;
+              order.rejectedTime = new Date();
+              break;
+            case 'update':
+              console.log(entity);
+            // order.status = EOrderStatus.COMPLETED;
+            // order.completedTime = new Date();
+            // break;
+          }
+
+          order.save();
+          await this.reservationCounterService.removeReservationByOrderId(
+            order._id,
+          );
+        }
       });
   }
 }

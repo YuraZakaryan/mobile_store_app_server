@@ -6,7 +6,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model, Types } from 'mongoose';
 import { catchError, firstValueFrom } from 'rxjs';
-import { EXPIRE_TIME_REFRESH, MAILER_USER } from 'src/constants';
+import {
+  EXPIRE_TIME_REFRESH,
+  MAILER_USER,
+  MAIN_ADMIN_USERNAME,
+} from 'src/constants';
 import { FindOneParams, ReqUser } from '../types';
 import { ConfirmOtpDto } from './dto/confirm-otp.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -34,7 +38,10 @@ export class UserService {
 
     return this.userModel.create({
       ...dto,
+      username: dto.username.toLowerCase(),
       role: !dto.role ? 'USER' : dto.role,
+      priceType: dto.priceType,
+      discountPercent: dto.discountPercent,
       stockToken: '',
       refreshToken: refreshToken,
       confirmed: !dto.confirmed ? false : dto.confirmed,
@@ -137,10 +144,16 @@ export class UserService {
     return this.userModel.findById(_id);
   }
 
-  async update(params: FindOneParams, dto: UpdateUserDto): Promise<User> {
+  async update(params: FindOneParams, dto: UpdateUserDto) {
     const id = params.id;
 
     const currentUser = await this.userModel.findById(id);
+
+    const counterparty = await this.createOrUpdateCounterparty(
+      dto,
+      currentUser.idCounterparty,
+    );
+    const counterpartyId = counterparty.id;
 
     const existingUserByUsername = await this.findUserByUsername(dto.username);
     if (existingUserByUsername && currentUser.username !== dto.username) {
@@ -170,6 +183,7 @@ export class UserService {
         priceType: dto.priceType,
         discountPercent: dto.discountPercent,
         confirmed: dto.confirmed,
+        idCounterparty: counterpartyId,
         stockToken: dto.stockToken,
         role: dto.role,
       },
@@ -178,7 +192,7 @@ export class UserService {
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
-    return user;
+    return currentUser;
   }
 
   async deleteOne(params: FindOneParams): Promise<Types.ObjectId> {
@@ -366,18 +380,8 @@ export class UserService {
     limit: number,
     skip: number,
   ) {
-    const userId: Types.ObjectId = req.user.sub;
-    const user = await this.userModel.findById(userId);
+    const { token } = await this.getMainAdminInfo();
 
-    if (!user) {
-      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
-    }
-
-    if (!user.stockToken) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
-
-    const token: string = user.stockToken;
     const apiUrl: string = `https://api.moysklad.ru/api/remap/1.2/entity/counterparty`;
 
     const authorizationHeader = {
@@ -441,26 +445,122 @@ export class UserService {
     }
   }
 
-  async getOneCounterpartyById(req: ReqUser, id: string) {
-    const userId: Types.ObjectId = req.user.sub;
-    const user = await this.userModel.findById(userId);
+  async getMainAdminInfo() {
+    const username = MAIN_ADMIN_USERNAME;
 
-    if (!user) {
-      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    const admin = await this.userModel.findOne({ username });
+
+    if (!admin.stockToken) {
+      console.warn('token_invalid');
+      return;
     }
 
-    if (!user.stockToken) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
+    return {
+      _id: admin._id,
+      token: admin.stockToken,
+    };
+  }
+
+  async createOrUpdateCounterparty(dto: UpdateUserDto, counterpartyId: string) {
+    const { token } = await this.getMainAdminInfo();
+
+    const apiUrl = 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty';
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    const name = `${dto.firstname} ${dto.lastname}`;
+    const phone = dto.phone && dto.phone.length > 1 ? dto.phone.slice(1) : 0;
+
+    const requestData = {
+      name: name,
+      legalTitle: name,
+      code: phone,
+      email: dto.mail || '',
+      phone: `+374${dto.phone.slice(1)}` || 0,
+      tags: ['գնորդներ'],
+      companyType: 'legal',
+      archived: false,
+      salesAmount: 0,
+    };
+
+    try {
+      // Проверяем, существует ли контрагент с указанным ID
+      const existCounterparty =
+        await this.getOneCounterpartyById(counterpartyId);
+
+      let response;
+
+      if (existCounterparty) {
+        const updateUrl = `${apiUrl}/${counterpartyId}`;
+        response = await firstValueFrom(
+          this.httpService
+            .put(updateUrl, requestData, { headers: authorizationHeader })
+            .pipe(
+              catchError((error) => {
+                const statusCode =
+                  error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+
+                throw new HttpException(
+                  statusCode == 401
+                    ? 'invalid_token'
+                    : 'counterparty_update_failed',
+                  HttpStatus.FORBIDDEN,
+                );
+              }),
+            ),
+        );
+      } else {
+        response = await firstValueFrom(
+          this.httpService
+            .post(apiUrl, requestData, { headers: authorizationHeader })
+            .pipe(
+              catchError((error) => {
+                const statusCode =
+                  error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+
+                throw new HttpException(
+                  statusCode == 401
+                    ? 'invalid_token'
+                    : 'counterparty_creation_failed',
+                  HttpStatus.FORBIDDEN,
+                );
+              }),
+            ),
+        );
+      }
+
+      const { data } = response;
+
+      return {
+        id: data.id,
+        name: data.name,
+        legalTitle: data.legalTitle,
+        phone: data.phone,
+        code: data.code,
+        externalCode: data.externalCode,
+        tags: data.tags,
+        companyType: data.companyType,
+        archived: data.archived,
+        salesAmount: data.salesAmount,
+      };
+    } catch (error) {
+      console.log(error);
+
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
+  }
+
+  async getOneCounterpartyById(id: string) {
+    const { token } = await this.getMainAdminInfo();
 
     if (!id) {
-      throw new HttpException(
-        'counterparty_id_is_not_specified',
-        HttpStatus.EXPECTATION_FAILED,
-      );
+      console.warn('counterparty_id_is_not_specified');
+      return null;
     }
 
-    const token: string = user.stockToken;
     const apiUrl: string = `https://api.moysklad.ru/api/remap/1.2/entity/counterparty/${id}`;
 
     const authorizationHeader = {
@@ -495,7 +595,8 @@ export class UserService {
         images: data.images,
       };
     } catch (error) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      console.warn('counterparty_not_found');
+      return null;
     }
   }
 

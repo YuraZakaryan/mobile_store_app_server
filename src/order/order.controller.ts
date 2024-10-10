@@ -157,7 +157,7 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR, UserRole.ADMIN)
-  // @UsePipes(ValidationPipe)
+  @UsePipes(ValidationPipe)
   @ApiOperation({ summary: 'Change order status' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -175,10 +175,11 @@ export class OrderController {
   @ApiParam({ name: 'id' })
   @Put('status/:id')
   changeOrderStatus(
+    @Req() req: ReqUser,
     @Param() params: FindOneParams,
     @Body() dto: ChangeOrderStatusDto,
-  ): Promise<Order> {
-    return this.orderService.changeOrderStatus(params, dto);
+  ) {
+    return this.orderService.changeOrderStatus(req, params, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -272,7 +273,7 @@ export class OrderController {
   @Get('stock/all')
   getAllStockOrders(
     @Req() req: ReqUser,
-    @Query('status') status: EOrderStockStatus,
+    @Query('status') status?: 'active' | 'history',
     @Query('name') name?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
@@ -295,7 +296,7 @@ export class OrderController {
   })
   @ApiParam({ name: 'id' })
   @Get('stock/:id')
-  getStockOrderById(@Param() params: FindOneParams): Promise<OrderStock> {
+  getStockOrderById(@Param() params: FindOneParams) {
     return this.orderService.getStockOrderById(params);
   }
 
@@ -348,8 +349,8 @@ export class OrderController {
     @Param() params: FindOneParams,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
-  ): Promise<TReturnItem<Order[]>> {
-    return this.orderService.getOrderByAuthorId(params, limit, skip);
+  ) {
+    return this.orderService.getOrdersByAuthorId(params, limit, skip);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -377,7 +378,7 @@ export class OrderController {
     @Query('name') name?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
-  ): Promise<TReturnItem<Order[]>> {
+  ) {
     return this.orderService.getAll(name, limit, skip);
   }
 }

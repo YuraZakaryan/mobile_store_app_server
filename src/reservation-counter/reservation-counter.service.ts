@@ -22,6 +22,8 @@ export class ReservationCounterService {
     productId: Types.ObjectId,
     authorId: Types.ObjectId,
     quantity: number,
+    orderId: Types.ObjectId,
+    forStock?: boolean,
   ): Promise<Types.ObjectId> {
     const product = await this.productModel.findById(productId);
 
@@ -32,6 +34,7 @@ export class ReservationCounterService {
     const existingReservation = await this.reservationCounterModel.findOne({
       product: productId,
       author: authorId,
+      order: orderId,
     });
 
     if (existingReservation) {
@@ -46,9 +49,12 @@ export class ReservationCounterService {
         product: productId,
         author: authorId,
         quantity,
+        order: orderId,
+        forStock: forStock || null,
         reservedAt: new Date(),
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-        // expiresAt: new Date(Date.now() + 10 * 1000), // 10 seconds
+        expiresAt: forStock
+          ? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) // 2 days
+          : new Date(Date.now() + 60 * 60 * 1000), // 1 hour
       });
 
       await newReservation.save();
@@ -60,7 +66,11 @@ export class ReservationCounterService {
     }
   }
 
-  async removeReservation(productId: Types.ObjectId, authorId: Types.ObjectId) {
+  async removeReservation(
+    productId: Types.ObjectId,
+    authorId: Types.ObjectId,
+    orderId: Types.ObjectId,
+  ) {
     const product = await this.productModel.findById(productId);
 
     if (!product) {
@@ -71,6 +81,7 @@ export class ReservationCounterService {
       await this.reservationCounterModel.findOneAndDelete({
         product: productId,
         author: authorId,
+        order: orderId,
       });
 
     if (!deleteExistingReservation) {
@@ -117,6 +128,22 @@ export class ReservationCounterService {
     return reservations;
   }
 
+  async getReservationByProductAndOrder(
+    productId: Types.ObjectId,
+    orderId: Types.ObjectId,
+  ) {
+    const reservation = await this.reservationCounterModel.findOne({
+      product: productId,
+      order: orderId,
+    });
+
+    if (!reservation) {
+      console.warn(`No reservations found for product ID: ${productId}`);
+    }
+
+    return reservation;
+  }
+
   async removeAllUserReservations(params: FindOneParams) {
     const userId = params.id;
 
@@ -153,6 +180,46 @@ export class ReservationCounterService {
       }
     }
     return reservations;
+  }
+
+  async removeReservationByOrderId(orderId: Types.ObjectId) {
+    const reservations = await this.reservationCounterModel.find({
+      order: orderId,
+    });
+
+    if (reservations.length === 0) {
+      console.warn(`No reservations found for order ID: ${orderId}`);
+      return;
+    }
+
+    for (const reservation of reservations) {
+      await this.removeReservationFromOrderItems(reservation._id);
+
+      const productUpdateResult = await this.productModel.updateOne(
+        { _id: reservation.product },
+        { $pull: { reservations: reservation._id } },
+      );
+
+      if (productUpdateResult.modifiedCount === 0) {
+        console.warn(
+          `No product found or updated with product ID: ${reservation.product} for reservation ID: ${reservation._id}`,
+        );
+      }
+
+      const deleteResult = await this.reservationCounterModel.deleteOne({
+        _id: reservation._id,
+      });
+
+      if (deleteResult.deletedCount === 0) {
+        console.warn(
+          `No reservation found with ID: ${reservation._id} to delete`,
+        );
+      }
+    }
+
+    console.log(
+      `Successfully removed all reservations for order ID: ${orderId}`,
+    );
   }
 
   @Cron(CronExpression.EVERY_30_MINUTES)

@@ -126,6 +126,7 @@ export class ProductController {
   }
 
   @ApiOperation({ summary: 'Search product by title' })
+  @UseGuards(JwtAuthGuard)
   @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -145,14 +146,16 @@ export class ProductController {
   })
   @Get('search')
   search(
+    @Req() req: ReqUser,
     @Query('title') title: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
   ): Promise<TReturnItem<Product[]>> {
-    return this.productService.search(title, limit, skip);
+    return this.productService.search(req, title, limit, skip);
   }
 
   @ApiOperation({ summary: 'Get all products' })
+  @UseGuards(JwtAuthGuard)
   @ApiResponse({ status: HttpStatus.OK, description: 'Found' })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -184,6 +187,7 @@ export class ProductController {
   })
   @Get('all')
   getAll(
+    @Req() req: ReqUser,
     @Query('title') title?: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
@@ -192,6 +196,7 @@ export class ProductController {
     @Query('not-activated') notActivated?: boolean,
   ): Promise<TReturnItem<Product[]>> {
     return this.productService.getAll(
+      req,
       title,
       limit,
       skip,
@@ -219,8 +224,8 @@ export class ProductController {
   })
   @UsePipes(ValidationPipe)
   @Post('stocks/withCount')
-  getAllStocksByProductIds(@Req() req: ReqUser, @Body() params: GetStocksDto) {
-    return this.productService.getAllStocksByProductIds(req, params);
+  getAllStocksByProductIds(@Body() params: GetStocksDto) {
+    return this.productService.getAllStocksByProductIds(params);
   }
 
   @UseGuards(JwtAuthGuard)

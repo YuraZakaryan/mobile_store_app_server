@@ -4,15 +4,11 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type OrderDocument = HydratedDocument<Order>;
 
-export enum EPackage {
-  BOX = 'box',
-  BAG = 'bag',
-}
-
 export enum EOrderStatus {
   IN_PROGRESS = 'inProgress',
   ORDERED = 'ordered',
-  ACCEPTED = 'accepted',
+  CONFIRMED = 'confirmed',
+  COMPLETED = 'completed',
   DELIVERED = 'delivered',
   REJECTED = 'rejected',
 }
@@ -21,9 +17,6 @@ export enum EOrderStatus {
 export class Order {
   @Prop()
   status: EOrderStatus;
-
-  @Prop()
-  packaging: EPackage;
 
   @Prop()
   confirmedTime: Date;
@@ -35,10 +28,16 @@ export class Order {
   deliveredTime: Date;
 
   @Prop()
+  completedTime: Date;
+
+  @Prop()
   rejectedTime: Date;
 
   @Prop()
   necessaryNotes: string;
+
+  @Prop()
+  stockOrderId: string;
 
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'OrderItem' }] })
   items: Types.ObjectId[];

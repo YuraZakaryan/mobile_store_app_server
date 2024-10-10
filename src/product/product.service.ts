@@ -16,12 +16,12 @@ import {
   TProductByDocumentData,
   TProductUpdateData,
 } from '../types';
-import { ERole } from '../user/dto/create-user.dto';
+import { EPriceType, ERole } from '../user/dto/create-user.dto';
 import { TReturnItem } from '../user/types';
 import { User } from '../user/user.schema';
 import { CreateProductDto } from './dto/create-product.dto';
 import { GetStocksDto } from './dto/get-stocks.dto';
-import { Product } from './product.schema';
+import { Product, ProductDocument } from './product.schema';
 import {
   EImageAdd,
   TProductStocksResponse,
@@ -261,11 +261,8 @@ export class ProductService {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
 
-    if (!user.stockToken) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
+    const { token } = await this.userService.getMainAdminInfo();
 
-    const token: string = user.stockToken;
     const apiUrl: string =
       'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
     const limit: number = 1000;
@@ -442,10 +439,19 @@ export class ProductService {
   }
 
   async search(
+    req: ReqUser,
     title: string,
     limit?: number,
     skip?: number,
   ): Promise<TReturnItem<Product[]>> {
+    const userId = req.user.sub;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    }
+
     const query = this.productModel
       .find({
         $or: [
@@ -469,20 +475,36 @@ export class ProductService {
     if (!products && products.length === 0) {
       throw new HttpException('Products not found', HttpStatus.NOT_FOUND);
     }
+
+    const modifiedProducts = await Promise.all(
+      products.map(async (product) => {
+        return await this.getAdvanceProductInfo(product, userId);
+      }),
+    );
+
     return {
       total_items: totalItems,
-      items: products,
+      items: modifiedProducts,
     };
   }
 
   async getAll(
+    req: ReqUser,
     title?: string,
     limit?: number,
     skip?: number,
     category?: Types.ObjectId,
     discount?: boolean,
     notActivated?: boolean,
-  ): Promise<TReturnItem<Product[]>> {
+  ): Promise<TReturnItem<(Product & { price: number })[]>> {
+    const userId = req.user.sub;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    }
+
     const queryConditions: any = {};
 
     if (category) {
@@ -508,7 +530,6 @@ export class ProductService {
       .sort({ count: -1, picture: -1, _id: -1 });
 
     const totalItemsQuery = this.productModel.find(queryConditions);
-
     const totalItems = await totalItemsQuery.countDocuments().exec();
 
     const products = await query.limit(limit).skip(skip).exec();
@@ -517,27 +538,23 @@ export class ProductService {
       throw new HttpException('Products not found', HttpStatus.NOT_FOUND);
     }
 
+    const modifiedProducts = await Promise.all(
+      products.map(async (product) => {
+        return await this.getAdvanceProductInfo(product, userId);
+      }),
+    );
+
     return {
       total_items: totalItems,
-      items: products,
+      items: modifiedProducts,
     };
   }
 
-  async getAllStocksByProductIds(req: ReqUser, dto: GetStocksDto) {
+  async getAllStocksByProductIds(dto: GetStocksDto) {
     const productIds = dto.ids;
-    const userId: Types.ObjectId = req.user.sub;
 
-    const user = await this.userModel.findById(userId);
+    const { token } = await this.userService.getMainAdminInfo();
 
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
-
-    if (!user.stockToken) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
-
-    const token: string = user.stockToken;
     const storeApiUrl = 'https://api.moysklad.ru/api/remap/1.2/entity/store';
     const authorizationHeader = {
       Authorization: `Bearer ${token}`,
@@ -690,7 +707,10 @@ export class ProductService {
     return product._id;
   }
 
-  async getOne(params: FindOneParams, req: ReqUser): Promise<Product> {
+  async getOne(
+    params: FindOneParams,
+    req: ReqUser,
+  ): Promise<Product & { price: number }> {
     const id = params.id;
 
     const userId = req.user.sub;
@@ -707,20 +727,61 @@ export class ProductService {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
 
-    const productQuantityDetails = await this.getProductQuantityDetails(
-      product._id,
-    );
-
     if (user.role === ERole.USER) {
       product.priceRetail = undefined;
       product.priceWildberries = undefined;
     } else if (user.role === ERole.SUPERUSER) {
       product.priceWildberries = undefined;
     }
-    return {
-      ...product.toObject(),
-      count: productQuantityDetails.availableQuantity,
-    };
+
+    return await this.getAdvanceProductInfo(product, userId);
+  }
+
+  async calculateProductPrice(
+    userId: Types.ObjectId,
+    productId: Types.ObjectId,
+  ): Promise<number> {
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    const product = await this.productModel.findById(productId);
+
+    if (!product) {
+      throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+    }
+
+    const discountPercent = user.discountPercent || 0;
+    const priceType = user.priceType;
+
+    let basePrice: number;
+
+    // Determine base price based on price type
+    if (priceType === EPriceType.RETAIL) {
+      basePrice = product.priceRetail;
+    } else if (priceType === EPriceType.WHOLESALE) {
+      basePrice = product.priceWholesale;
+    } else {
+      throw new HttpException('Invalid price type', HttpStatus.BAD_REQUEST);
+    }
+
+    // Calculate final price after discount
+    const discountAmount = (basePrice * discountPercent) / 100;
+    const finalPrice = basePrice - discountAmount;
+
+    return finalPrice;
+  }
+
+  async getOneById(id: Types.ObjectId) {
+    const product = await this.productModel.findById(id);
+
+    if (!product) {
+      throw new HttpException('product_not_found', HttpStatus.NOT_FOUND);
+    }
+
+    return product;
   }
 
   async fetchImageFromStock(imageHref: string, token: string) {
@@ -772,12 +833,91 @@ export class ProductService {
       );
     }
   }
+  async fetchProductInfoFromStock(token: string, productStockId: string) {
+    const url: string = `https://api.moysklad.ru/api/remap/1.2/entity/product/${productStockId}`;
+
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'image/png',
+    };
+
+    try {
+      return await firstValueFrom(
+        this.httpService.get(url, { headers: authorizationHeader }).pipe(
+          catchError(() => {
+            throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+          }),
+          map((response) => response.data),
+        ),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'error_fetching_product_from_stock',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  async fetchProductInfoStock(token: string, productStockId: string) {
+    const url = `https://api.moysklad.ru/api/remap/1.2/report/stock/bystore?product.id=${productStockId}`;
+    const authorizationHeader = {
+      Authorization: `Bearer ${token}`,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, { headers: authorizationHeader }).pipe(
+          catchError(() => {
+            throw new HttpException('invalid_token', HttpStatus.FORBIDDEN);
+          }),
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      throw new HttpException(
+        'error_fetching_product_stock',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getAdvanceProductInfo(
+    product: ProductDocument,
+    userId: Types.ObjectId,
+  ) {
+    const price = await this.calculateProductPrice(userId, product._id);
+
+    const productQuantityDetails = await this.getProductQuantityDetails(
+      product._id,
+    );
+
+    return {
+      ...product.toObject(),
+      price,
+      count: productQuantityDetails.availableQuantity,
+      totalReserved: productQuantityDetails.totalReservedQuantity,
+    };
+  }
+
   async getProductQuantityDetails(productId: Types.ObjectId) {
     const product = await this.productModel.findById(productId);
 
     if (!product) {
       throw new HttpException('product_not_found', HttpStatus.NOT_FOUND);
     }
+
+    // const { token } = await this.userService.getMainAdminInfo();
+
+    // const productInfoFromStock = await this.fetchProductInfoStock(
+    //   token,
+    //   product.idProductByStock,
+    // );
+
+    // const stockData = productInfoFromStock.rows?.[0];
+    // const stockQuantity = stockData ? stockData.quantity : 0;
 
     const reservations = await this.reservationCounterModel.find({
       product: productId,
@@ -788,10 +928,13 @@ export class ProductService {
     }, 0);
 
     const availableQuantity = product.count - totalReservedQuantity;
+    // const availableQuantity = stockQuantity - totalReservedQuantity;
 
     return {
       currentCount: product.count,
+      // currentCount: stockQuantity,
       availableQuantity: availableQuantity >= 0 ? availableQuantity : 0,
+      totalReservedQuantity,
     };
   }
 }

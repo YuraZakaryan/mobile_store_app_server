@@ -31,7 +31,7 @@ export class User {
   @Prop()
   phone: string;
 
-  @Prop()
+  @Prop({ default: EPriceType.RETAIL })
   priceType: EPriceType;
 
   @Prop({ default: 0 })
@@ -59,6 +59,9 @@ export class User {
 
   @Prop()
   refreshToken: string;
+
+  @Prop()
+  idCounterparty: string;
 
   @Prop()
   stockToken: string;

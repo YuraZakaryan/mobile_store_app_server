@@ -1,16 +1,16 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { LoginUserDto } from './dto/login-user.dto';
-import { InjectModel } from '@nestjs/mongoose';
-import { User } from '../user/user.schema';
-import { Model } from 'mongoose';
-import { UserService } from '../user/user.service';
-import * as bcrypt from 'bcryptjs';
-import { CreateUserDto, ERole } from '../user/dto/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import * as bcrypt from 'bcryptjs';
+import { Model } from 'mongoose';
 import { payloadJwt } from '../constants';
 import { IGenerateTokenPayload, ReqUser } from '../types';
-import { MeDto } from './dto/me-dto';
+import { CreateUserDto, ERole } from '../user/dto/create-user.dto';
+import { User } from '../user/user.schema';
+import { UserService } from '../user/user.service';
 import { formatDate } from '../utils/date';
+import { LoginUserDto } from './dto/login-user.dto';
+import { MeDto } from './dto/me-dto';
 
 @Injectable()
 export class AuthService {
@@ -26,7 +26,9 @@ export class AuthService {
   }
 
   private async validateUser(dto: LoginUserDto): Promise<User> {
-    const user = await this.userService.findUserByUsername(dto.username);
+    const user = await this.userService.findUserByUsername(
+      dto.username.toLowerCase(),
+    );
     if (!user || !(await bcrypt.compare(dto.password, user.password))) {
       throw new HttpException(
         'invalid_login_credentials',

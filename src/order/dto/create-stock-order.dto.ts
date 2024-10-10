@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { EPriceType } from 'src/user/dto/create-user.dto';
 import { OrderItem } from '../schema/order-item.schema';
 
 interface IOrderItemWithId extends OrderItem {
@@ -23,6 +24,19 @@ export class UpdateStockOrderDto {
 
   @ApiProperty({ example: 'Some notes', description: 'NecessaryNotes' })
   readonly necessaryNotes: string;
+
+  @ApiProperty({
+    example: EPriceType,
+    description: 'price type',
+  })
+  @IsString({ message: 'price type must be string' })
+  @IsEnum(EPriceType)
+  @IsNotEmpty({ message: 'price type is required' })
+  readonly priceType: string;
+
+  @ApiProperty({ example: '10', description: 'Discount in percent' })
+  @IsNumber({}, { message: 'discount in percent must be a number' })
+  discountPercent: number;
 
   @ApiProperty({
     example: false,

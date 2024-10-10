@@ -3,6 +3,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { catchError, firstValueFrom } from 'rxjs';
+import { ProductService } from 'src/product/product.service';
 import { ReservationCounterService } from 'src/reservation-counter/reservation-counter.service';
 import { EPriceType } from 'src/user/dto/create-user.dto';
 import { FindOneParams, ReqUser } from '../types';
@@ -16,9 +17,9 @@ import { ConfirmStockOrderDto } from './dto/confirm-stock-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStockOrderDto } from './dto/create-stock-order.dto';
 import { ToOrderDto } from './dto/to-order.dto';
-import { OrderItem } from './schema/order-item.schema';
+import { OrderItem, OrderItemDocument } from './schema/order-item.schema';
 import { EOrderStockStatus, OrderStock } from './schema/order-stock.schema';
-import { EOrderStatus, EPackage, Order } from './schema/order.schema';
+import { EOrderStatus, Order, OrderDocument } from './schema/order.schema';
 
 @Injectable()
 export class OrderService {
@@ -29,25 +30,23 @@ export class OrderService {
     @InjectModel(Product.name) private productModel: Model<Product>,
     @InjectModel(User.name) private userModel: Model<User>,
     private userService: UserService,
+    private productService: ProductService,
     private reservationCounterService: ReservationCounterService,
     private readonly httpService: HttpService,
   ) {}
 
   async createOrAdd(dto: CreateOrderDto) {
-    // Search order by author and status will be equal in progress
     const existOrder = await this.orderModel.findOne({
       author: dto.author,
       status: EOrderStatus.IN_PROGRESS,
     });
 
-    // Find product, when it doesn't exist, show error
     const product = await this.productModel.findById(dto.product);
     if (!product) {
       throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
     }
 
     const user = await this.userModel.findById(dto.author);
-
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
@@ -59,65 +58,80 @@ export class OrderService {
       throw new HttpException('User banned', HttpStatus.GONE);
     }
 
-    if (dto.itemCount > product.count) {
+    const getProductQuantity =
+      await this.productService.getProductQuantityDetails(product._id);
+
+    if (dto.itemCount > getProductQuantity.availableQuantity) {
       throw new HttpException(
-        'Not enough quantity in stock',
+        'not_enough_product_quantity_in_stock',
         HttpStatus.BAD_GATEWAY,
       );
     }
 
-    // Add reservation logic
-    const reservationId =
-      await this.reservationCounterService.createOrUpdateReservation(
-        product._id,
-        user._id,
-        dto.itemCount,
-      );
+    let orderId: Types.ObjectId | null;
 
     if (!existOrder) {
       const orderItem = await this.orderItemModel.create({
         ...dto,
-        reserved: reservationId,
+        reserved: null,
       });
-      // Create order when it doesn't exist
+
       const order = await this.orderModel.create({
         author: dto.author,
         authorName: user.firstname,
         status: EOrderStatus.IN_PROGRESS,
         necessaryNotes: '',
-        packaging: EPackage.BAG,
         items: [orderItem._id],
         acceptedTime: null,
         confirmedTime: null,
         deliveredTime: null,
         rejectedTime: null,
       });
-      orderItem.order = order._id;
+
+      orderId = order._id;
+      orderItem.order = orderId;
       await orderItem.save();
     } else {
-      // if order item existed add up by item count from dto
+      orderId = existOrder._id;
+
       const existOrderItem = await this.orderItemModel.findOne({
         product: dto.product,
         author: dto.author,
         inProgress: true,
       });
+
       if (existOrderItem) {
         existOrderItem.itemCount += dto.itemCount;
         await existOrderItem.save();
       } else {
-        // Add product to existed order
         const orderItem = await this.orderItemModel.create({
           ...dto,
-          order: existOrder._id,
-          reserved: reservationId,
+          order: orderId,
+          reserved: null,
         });
+
         if (existOrder.status !== EOrderStatus.IN_PROGRESS) {
           throw new HttpException('Order already ordered', HttpStatus.CONFLICT);
         }
+
         existOrder.items.push(orderItem._id);
         await existOrder.save();
       }
     }
+
+    const reservationId =
+      await this.reservationCounterService.createOrUpdateReservation(
+        product._id,
+        user._id,
+        dto.itemCount,
+        orderId,
+      );
+
+    await this.orderItemModel.updateMany(
+      { order: orderId, reserved: null },
+      { $set: { reserved: reservationId } },
+    );
+
     return product;
   }
 
@@ -163,6 +177,8 @@ export class OrderService {
       counterpartyId,
       counterpartyName,
       necessaryNotes,
+      discountPercent,
+      priceType,
       isEdited,
       items,
     } = dto;
@@ -184,7 +200,9 @@ export class OrderService {
         items: [],
         counterpartyId,
         counterpartyName,
-        necessaryNotes: necessaryNotes,
+        necessaryNotes,
+        discountPercent,
+        priceType,
         author: userId,
         confirmedTime: null,
         status: EOrderStockStatus.IN_PROGRESS,
@@ -197,7 +215,10 @@ export class OrderService {
           throw new HttpException('product_not_found', HttpStatus.NOT_FOUND);
         }
 
-        if (item.itemCount > product.count) {
+        const getProductQuantity =
+          await this.productService.getProductQuantityDetails(product._id);
+
+        if (item.itemCount > getProductQuantity.availableQuantity) {
           throw new HttpException(
             'not_enough_product_quantity_in_stock',
             HttpStatus.BAD_GATEWAY,
@@ -213,34 +234,40 @@ export class OrderService {
           author: userId,
         });
 
-        await orderItem.save();
+        await this.reservationCounterService.createOrUpdateReservation(
+          product._id,
+          newOrder.author,
+          item.itemCount,
+          newOrder._id,
+          true,
+        );
 
         newOrder.items.push(orderItem._id);
       }
 
       await newOrder.save();
 
-      return newOrder.populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      });
+      const orderItems = await this.getOrderItemsWithReservationByOrderId(
+        order._id,
+        true,
+      );
+
+      return {
+        ...newOrder.toObject(),
+        items: orderItems,
+      };
     }
 
     for (const item of items) {
       if (item.inProgress) {
-        const product = await this.productModel.findById(item.product._id);
+        const product = await this.productModel.findById(item.product);
 
-        if (!product) {
-          throw new HttpException('product_not_found', HttpStatus.NOT_FOUND);
-        }
+        const getProductQuantity =
+          await this.productService.getProductQuantityDetails(product._id);
 
-        if (item.itemCount > product.count) {
+        if (item.itemCount > getProductQuantity.availableQuantity) {
           throw new HttpException(
-            'Not enough quantity in stock',
+            'not_enough_product_quantity_in_stock',
             HttpStatus.BAD_GATEWAY,
           );
         }
@@ -253,27 +280,13 @@ export class OrderService {
           { $set: { itemCount: item.itemCount } },
           { new: true },
         );
-      }
-    }
 
-    for (const item of items) {
-      if (item.inProgress) {
-        const product = await this.productModel.findById(item.product);
-
-        if (item.itemCount > product.count) {
-          throw new HttpException(
-            'Not enough quantity in stock',
-            HttpStatus.BAD_GATEWAY,
-          );
-        }
-
-        await this.orderItemModel.findOneAndUpdate(
-          {
-            _id: item._id,
-            inProgress: true,
-          },
-          { $set: { itemCount: item.itemCount } },
-          { new: true },
+        await this.reservationCounterService.createOrUpdateReservation(
+          product._id,
+          order.author,
+          item.itemCount,
+          order._id,
+          true,
         );
       }
     }
@@ -285,51 +298,83 @@ export class OrderService {
         counterpartyId,
         counterpartyName,
         necessaryNotes,
+        priceType,
+        discountPercent,
       },
       { new: true },
     );
 
+    const orderItems = await this.getOrderItemsWithReservationByOrderId(
+      order._id,
+      true,
+    );
+
     if (updateOrder) {
-      return updateOrder.populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      });
+      return {
+        ...updateOrder.toObject(),
+        items: orderItems,
+      };
     }
   }
 
-  async confirmStockOrder(req: ReqUser, dto: ConfirmStockOrderDto) {
-    const userId = req.user.sub;
-    const { orderId, counterpartyId, items } = dto;
+  async confirmOrder(
+    priceKey: string,
+    orderId: Types.ObjectId,
+    counterpartyId: string,
+    items: OrderItem[],
+    relatedOrderModel: Model<Order | OrderStock>,
+    percent?: number,
+  ) {
+    const { token } = await this.userService.getMainAdminInfo();
 
-    const user = await this.userModel.findById(userId);
-
-    if (!user) throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
-
-    if (!user.stockToken) {
-      throw new HttpException('token_not_found', HttpStatus.NOT_FOUND);
-    }
-
-    const order = await this.orderStockModel.findById(orderId);
+    const order = await relatedOrderModel.findById(orderId).populate({
+      path: 'items',
+      model: 'OrderItem',
+      populate: {
+        path: 'product',
+        model: 'Product',
+      },
+    });
 
     if (!order)
       throw new HttpException('order_not_found', HttpStatus.NOT_FOUND);
-
-    const counterparty = await this.userService.getOneCounterpartyById(
-      req,
-      counterpartyId,
-    );
-    if (!counterparty)
-      throw new HttpException('counterparty_not_found', HttpStatus.NOT_FOUND);
 
     if (!Array.isArray(items) || items.length === 0) {
       throw new HttpException('items_array_is_empty', HttpStatus.NOT_FOUND);
     }
 
-    const token: string = user.stockToken;
+    for (const item of items as OrderItemDocument[]) {
+      if (item.inProgress) {
+        const product = await this.productModel.findById(item.product);
+
+        const getProductQuantity =
+          await this.productService.getProductQuantityDetails(product._id);
+
+        if (item.itemCount > getProductQuantity.availableQuantity) {
+          throw new HttpException(
+            'not_enough_product_quantity_in_stock',
+            HttpStatus.BAD_GATEWAY,
+          );
+        }
+
+        await this.orderItemModel.findOneAndUpdate(
+          {
+            _id: item._id,
+            inProgress: true,
+          },
+          { $set: { itemCount: item.itemCount } },
+          { new: true },
+        );
+
+        await this.reservationCounterService.createOrUpdateReservation(
+          product._id,
+          order.author,
+          item.itemCount,
+          order._id,
+        );
+      }
+    }
+
     const apiUrl: string = `https://api.moysklad.ru/api/remap/1.2/entity/customerorder`;
 
     const headers = {
@@ -338,19 +383,18 @@ export class OrderService {
       'Content-Type': 'application/json',
     };
 
-    const checkPriceType = {
-      [EPriceType.RETAIL]: 'priceRetail',
-      [EPriceType.WHOLESALE]: 'wholesale',
-    };
-
     const positions = items.map((item) => {
       const product = item.product as any;
 
-      const priceType = user.priceType || EPriceType.RETAIL;
+      let price: number;
 
-      const priceKey = checkPriceType[priceType];
-
-      const price = product[priceKey] ?? product.priceRetail;
+      if (priceKey && percent !== undefined) {
+        // Calculate final price with discount
+        const discountAmount = (product[priceKey] * percent) / 100;
+        price = product[priceKey] - discountAmount;
+      } else {
+        price = product.price;
+      }
 
       return {
         quantity: item.itemCount,
@@ -384,7 +428,7 @@ export class OrderService {
     };
 
     try {
-      await firstValueFrom(
+      const response = await firstValueFrom(
         this.httpService
           .post(apiUrl, orderData, {
             headers,
@@ -407,6 +451,8 @@ export class OrderService {
 
       order.status = EOrderStockStatus.CONFIRMED;
       order.confirmedTime = nowDate;
+      order.stockOrderId = response.data.id;
+
       const savedOrder = await order.save();
 
       if (savedOrder) {
@@ -426,17 +472,44 @@ export class OrderService {
         }
       }
 
-      return savedOrder.populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      });
+      const orderItems = await this.getOrderItemsWithReservationByOrderId(
+        order._id,
+        true,
+      );
+
+      if (savedOrder) {
+        return {
+          ...savedOrder.toObject(),
+          items: orderItems,
+        };
+      }
     } catch (err) {
       throw new HttpException(err.message, err.status);
     }
+  }
+
+  async confirmStockOrder(req: ReqUser, dto: ConfirmStockOrderDto) {
+    const userId = req.user.sub;
+    const { orderId, counterpartyId, items } = dto;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.BAD_REQUEST);
+    }
+    const counterparty =
+      await this.userService.getOneCounterpartyById(counterpartyId);
+
+    if (!counterparty)
+      throw new HttpException('counterparty_not_found', HttpStatus.NOT_FOUND);
+
+    return await this.confirmOrder(
+      '',
+      orderId,
+      counterpartyId,
+      items,
+      this.orderStockModel,
+    );
   }
 
   async addProductToStockOrder(dto: AddProductToStockOrderDto) {
@@ -463,7 +536,10 @@ export class OrderService {
       throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
     }
 
-    if (dto.itemCount > product.count) {
+    const getProductQuantity =
+      await this.productService.getProductQuantityDetails(product._id);
+
+    if (dto.itemCount > getProductQuantity.availableQuantity) {
       throw new HttpException(
         'not_enough_product_quantity_in_stock',
         HttpStatus.BAD_GATEWAY,
@@ -484,7 +560,21 @@ export class OrderService {
         HttpStatus.CONFLICT,
       );
     } else {
-      const orderItem = await this.orderItemModel.create(dto);
+      // Add reservation logic
+      const reservationId =
+        await this.reservationCounterService.createOrUpdateReservation(
+          product._id,
+          user._id,
+          dto.itemCount,
+          existOrder._id,
+          true,
+        );
+
+      const orderItem = await this.orderItemModel.create({
+        ...dto,
+        reserved: reservationId,
+      });
+
       orderItem.order = existOrder._id;
       existOrder.items.push(orderItem._id);
 
@@ -497,36 +587,27 @@ export class OrderService {
 
   async toOrder(params: FindOneParams, dto: ToOrderDto) {
     const orderId = params.id;
+    const { necessaryNotes, items } = dto;
 
-    const order = await this.orderModel.findById(orderId);
-
-    if (!order) {
-      throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+    const existOrder = await this.orderModel.findById(orderId);
+    if (!existOrder) {
+      throw new HttpException('the_order_does_not_exist', HttpStatus.CONFLICT);
     }
 
-    for (const item of dto.items) {
+    for (const item of items) {
       if (item.inProgress) {
         const product = await this.productModel.findById(item.product);
-        const orderItem = await this.orderItemModel.findById(item._id).lean();
-        const oldItemCount: number = orderItem.itemCount;
 
-        if (item.itemCount > product.count) {
+        const getProductQuantity =
+          await this.productService.getProductQuantityDetails(product._id);
+
+        if (item.itemCount > getProductQuantity.availableQuantity) {
           throw new HttpException(
-            'Not enough quantity in stock',
+            'not_enough_product_quantity_in_stock',
             HttpStatus.BAD_GATEWAY,
           );
         }
-        if (oldItemCount < item.itemCount) {
-          product.count = Math.max(
-            0,
-            product.count - (item.itemCount - oldItemCount),
-          );
 
-          await product.save();
-        } else if (oldItemCount > item.itemCount) {
-          product.count += oldItemCount - item.itemCount;
-          await product.save();
-        }
         await this.orderItemModel.findOneAndUpdate(
           {
             _id: item._id,
@@ -535,6 +616,13 @@ export class OrderService {
           { $set: { itemCount: item.itemCount } },
           { new: true },
         );
+
+        await this.reservationCounterService.createOrUpdateReservation(
+          product._id,
+          existOrder.author,
+          item.itemCount,
+          existOrder._id,
+        );
       }
     }
 
@@ -542,8 +630,7 @@ export class OrderService {
     const isoString: string = currentDate.toISOString();
 
     const updateOrder = await this.orderModel.findByIdAndUpdate(orderId, {
-      packaging: dto.packaging,
-      necessaryNotes: dto.necessaryNotes,
+      necessaryNotes,
       status: EOrderStatus.ORDERED,
       confirmedTime: isoString,
     });
@@ -555,7 +642,7 @@ export class OrderService {
           inProgress: false,
         },
       );
-      return order;
+      return existOrder;
     }
   }
 
@@ -570,14 +657,23 @@ export class OrderService {
   }
 
   async changeOrderStatus(
+    req: ReqUser,
     params: FindOneParams,
     dto: ChangeOrderStatusDto,
   ): Promise<Order> {
-    const id = params.id;
+    const userId = req.user.sub;
     const currentDate: Date = new Date();
 
+    const orderId = params.id;
+
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
+    }
+
     const order = await this.orderModel
-      .findById(id)
+      .findById(orderId)
       .populate({
         path: 'items',
         model: 'OrderItem',
@@ -587,28 +683,56 @@ export class OrderService {
         },
       })
       .populate('author');
+
     if (!order) {
       throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
     }
+
     if (!dto.status) {
       throw new HttpException('Please type status', HttpStatus.FORBIDDEN);
     }
 
     switch (dto.status) {
-      case EOrderStatus.ACCEPTED:
-        if (order.status !== EOrderStatus.ACCEPTED) {
-          order.acceptedTime = currentDate;
-          await order.save();
+      case EOrderStatus.CONFIRMED:
+        if (order.status !== EOrderStatus.CONFIRMED) {
+          const author = await this.userModel.findById(order.author);
 
-          for (const item of dto.items) {
-            const productId = item.product._id;
-            const product = await this.productModel.findById(productId);
-
-            if (product) {
-              product.count = Math.max(product.count - item.itemCount, 0);
-              await product.save();
-            }
+          if (!author) {
+            throw new HttpException('user_not_found', HttpStatus.NOT_FOUND);
           }
+
+          const counterparty = await this.userService.getOneCounterpartyById(
+            author.idCounterparty,
+          );
+
+          if (!counterparty) {
+            throw new HttpException(
+              'counterparty_not_found',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+
+          const items = await this.orderItemModel
+            .find({ order: orderId })
+            .populate('product');
+
+          const checkPriceType = {
+            [EPriceType.RETAIL]: 'priceRetail',
+            [EPriceType.WHOLESALE]: 'priceWholesale',
+          };
+
+          const priceType = author.priceType || EPriceType.RETAIL;
+
+          const priceKey = checkPriceType[priceType];
+
+          await this.confirmOrder(
+            priceKey,
+            orderId,
+            author.idCounterparty,
+            items,
+            this.orderModel,
+            author.discountPercent,
+          );
         }
         break;
       case EOrderStatus.DELIVERED:
@@ -618,18 +742,21 @@ export class OrderService {
         }
         break;
       case EOrderStatus.REJECTED:
+        await this.reservationCounterService.removeReservationByOrderId(
+          orderId,
+        );
         order.rejectedTime = currentDate;
         await order.save();
         break;
     }
 
-    order.status = dto.status;
-    await order.save();
+    // order.status = dto.status;
+    // await order.save();
 
     return order;
   }
 
-  async getStockOrderById(params: FindOneParams): Promise<OrderStock> {
+  async getStockOrderById(params: FindOneParams) {
     const id = params.id;
 
     const order = await this.orderStockModel.findById(id);
@@ -638,14 +765,16 @@ export class OrderService {
       throw new HttpException('order_not_found', HttpStatus.NOT_FOUND);
     }
 
-    return order.populate({
-      path: 'items',
-      model: 'OrderItem',
-      populate: {
-        path: 'product',
-        model: 'Product',
-      },
-    });
+    const orderItems = await this.getOrderItemsWithReservationByOrderId(
+      order._id,
+      true,
+      order.status,
+    );
+
+    return {
+      ...order.toObject(),
+      items: orderItems,
+    };
   }
 
   async getOrderInProgress(params: FindOneParams) {
@@ -660,9 +789,9 @@ export class OrderService {
       throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
     }
 
-    // Use the new method to get order items
     const orderItems = await this.getOrderItemsWithReservationByOrderId(
       order._id,
+      false,
     );
 
     return {
@@ -711,25 +840,26 @@ export class OrderService {
       throw new HttpException('Orders not found', HttpStatus.NOT_FOUND);
     }
 
-    return {
-      total_items: totalItems,
-      items: orders,
-    };
-  }
+    const ordersWithDetails = await Promise.all(
+      orders.map(async (order: OrderDocument) => {
+        const orderItemsWithReservation =
+          await this.getOrderItemsWithReservationByOrderId(
+            order._id,
+            false,
+            order.status,
+          );
 
-  async deleteOrderItemByIdTest(id: Types.ObjectId) {
-    const orderItem = await this.orderItemModel.findById(id);
-
-    if (!orderItem) {
-      throw new HttpException('Order item not found!', HttpStatus.NOT_FOUND);
-    }
-
-    await this.reservationCounterService.removeReservation(
-      orderItem.product._id,
-      orderItem.author._id,
+        return {
+          ...order.toObject(),
+          items: orderItemsWithReservation,
+        };
+      }),
     );
 
-    return 'Success!';
+    return {
+      total_items: totalItems,
+      items: ordersWithDetails,
+    };
   }
 
   async deleteOrderItemById(
@@ -753,6 +883,7 @@ export class OrderService {
     }
 
     const relatedOrder = await relatedModel.findOne({ _id: orderId });
+
     if (removeOrder && relatedOrder && relatedOrder.items.length === 1) {
       await relatedOrder.deleteOne();
     } else {
@@ -771,31 +902,23 @@ export class OrderService {
     await this.reservationCounterService.removeReservation(
       orderItem.product._id,
       orderItem.author,
+      orderId,
     );
 
     return orderItem._id;
   }
 
-  async getOrderByAuthorId(
+  async getOrdersByAuthorId(
     params: FindOneParams,
     limit?: number,
     skip?: number,
-  ): Promise<TReturnItem<Order[]>> {
+  ) {
     const authorId = params.id;
     const query = this.orderModel
       .find({
         author: authorId,
       })
-      .sort({ _id: -1 })
-      .populate({
-        path: 'items',
-        model: 'OrderItem',
-        populate: {
-          path: 'product',
-          model: 'Product',
-        },
-      })
-      .populate('author');
+      .sort({ _id: -1 });
 
     const totalItemsQuery = this.orderModel.find({
       author: authorId,
@@ -808,34 +931,66 @@ export class OrderService {
     if (!orders && orders.length === 0) {
       throw new HttpException('Orders not found', HttpStatus.NOT_FOUND);
     }
+    const ordersWithReservations = await Promise.all(
+      orders.map(async (order) => {
+        const orderItems = await this.getOrderItemsWithReservationByOrderId(
+          order._id,
+          false,
+          order.status,
+        );
+        return {
+          ...order.toObject(),
+          items: orderItems,
+        };
+      }),
+    );
+
     return {
       total_items: totalItems,
-      items: orders,
+      items: ordersWithReservations,
     };
   }
 
   async getOrderItemsWithReservationByOrderId(
     orderId: Types.ObjectId,
-  ): Promise<OrderItem[]> {
+    forStock: boolean | null,
+    status?: EOrderStockStatus | EOrderStatus,
+  ) {
     const orderItems = await this.orderItemModel
-      .find({ order: orderId })
-      .populate('product');
+      .find({ order: orderId, forStock })
+      .populate('product')
+      .lean();
 
     const orderItemsWithReservations = await Promise.all(
       orderItems.map(async (item) => {
-        const reservations =
-          await this.reservationCounterService.getReservationsByProduct(
+        const productQuantityDetails =
+          await this.productService.getProductQuantityDetails(item.product._id);
+
+        const reservation =
+          await this.reservationCounterService.getReservationByProductAndOrder(
             item.product._id,
+            orderId,
           );
 
-        // Find the quantity of the reservation associated with this order item
-        const reservation = reservations.find((res) =>
-          res.product.equals(item.product._id),
+        const price = await this.productService.calculateProductPrice(
+          item.author,
+          item.product._id,
         );
 
         return {
-          ...item.toObject(),
-          itemCount: reservation ? reservation.quantity : 0,
+          ...item,
+          itemCount:
+            status && status !== EOrderStockStatus.IN_PROGRESS
+              ? item.itemCount
+              : reservation
+                ? reservation.quantity
+                : 0,
+          product: {
+            ...item.product,
+            price,
+            count: productQuantityDetails.availableQuantity,
+            totalReserved: productQuantityDetails.totalReservedQuantity,
+          },
         };
       }),
     );
@@ -843,11 +998,26 @@ export class OrderService {
     return orderItemsWithReservations;
   }
 
-  async getAll(
-    name?: string,
-    limit?: number,
-    skip?: number,
-  ): Promise<TReturnItem<Order[]>> {
+  async getOrderByStockOrderId(id: string) {
+    let order = await this.orderModel.findOne({
+      stockOrderId: id,
+    });
+
+    if (!order) {
+      order = await this.orderStockModel.findOne({
+        stockOrderId: id,
+      });
+    }
+
+    if (!order) {
+      console.warn('Order not found');
+      return null;
+    }
+
+    return order;
+  }
+
+  async getAll(name?: string, limit?: number, skip?: number) {
     const queryConditions: any = {};
 
     if (name !== undefined) {
@@ -895,9 +1065,21 @@ export class OrderService {
       throw new HttpException('Orders not found', HttpStatus.NOT_FOUND);
     }
 
+    const ordersWithDetails = await Promise.all(
+      orders.map(async (order: OrderDocument) => {
+        const orderItemsWithReservation =
+          await this.getOrderItemsWithReservationByOrderId(order._id, false);
+
+        return {
+          ...order.toObject(),
+          items: orderItemsWithReservation,
+        };
+      }),
+    );
+
     return {
       total_items: totalItems,
-      items: orders,
+      items: ordersWithDetails,
     };
   }
 
@@ -906,7 +1088,7 @@ export class OrderService {
     name?: string,
     limit?: number,
     skip?: number,
-    status: EOrderStockStatus = EOrderStockStatus.IN_PROGRESS,
+    status: 'active' | 'history' = 'active',
   ): Promise<TReturnItem<OrderStock[]>> {
     const authorId = req.user.sub;
 
@@ -925,7 +1107,10 @@ export class OrderService {
     const orders = await this.orderStockModel
       .find({
         author: authorId,
-        status,
+        status:
+          status && status === 'history'
+            ? { $ne: EOrderStatus.IN_PROGRESS }
+            : EOrderStatus.IN_PROGRESS,
         ...queryConditions,
       })
       .limit(limit)

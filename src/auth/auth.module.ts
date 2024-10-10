@@ -4,9 +4,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import * as process from 'process';
+import { UserModule } from 'src/user/user.module';
 import { EXPIRE_TIME_ACCESS } from '../constants';
 import { User, UserSchema } from '../user/user.schema';
-import { UserService } from '../user/user.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
@@ -21,9 +21,10 @@ const PRIVATE_KEY_ACCESS: string = process.env.PRIVATE_KEY_ACCESS;
       signOptions: { expiresIn: EXPIRE_TIME_ACCESS + 's' },
     }),
     PassportModule.register({ defaultStrategy: 'jwt' }),
+    UserModule,
     HttpModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, UserService],
+  providers: [AuthService],
 })
 export class AuthModule {}

@@ -1,6 +1,8 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { OrderModule } from 'src/order/order.module';
+import { ReservationCounterModule } from 'src/reservation-counter/reservation-counter.module';
 import {
   ReservationCounter,
   ReservationCounterSchema,
@@ -27,8 +29,11 @@ import { WebhookService } from './webhook.service';
         schema: CategorySchema,
       },
     ]),
+    ReservationCounterModule,
+    OrderModule,
     UserModule,
     HttpModule,
   ],
+  exports: [WebhookService],
 })
 export class WebhookModule {}

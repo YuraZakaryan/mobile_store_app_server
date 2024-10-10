@@ -9,6 +9,9 @@ export class ReservationCounter {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Product' })
   product: Types.ObjectId;
 
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Product' })
+  order: Types.ObjectId;
+
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   author: Types.ObjectId;
 

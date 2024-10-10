@@ -133,8 +133,8 @@ export class UserController {
     required: true,
   })
   @Get('counterparty')
-  async getOneCounterpartyById(@Req() req: ReqUser, @Query('id') id: string) {
-    return this.userService.getOneCounterpartyById(req, id);
+  async getOneCounterpartyById(@Query('id') id: string) {
+    return this.userService.getOneCounterpartyById(id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -154,10 +154,7 @@ export class UserController {
   })
   @ApiParam({ name: 'id' })
   @Put(':id')
-  async update(
-    @Param() params: FindOneParams,
-    @Body() dto: UpdateUserDto,
-  ): Promise<User> {
+  async update(@Param() params: FindOneParams, @Body() dto: UpdateUserDto) {
     return this.userService.update(params, dto);
   }
 

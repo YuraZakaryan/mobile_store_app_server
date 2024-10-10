@@ -26,4 +26,11 @@ export class WebhookController {
   deleteByWebhook(@Body() dto: TAuditData) {
     return this.webhookService.deleteByWebhook(dto);
   }
+
+  @ApiOperation({ summary: 'Get custom order info' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+  @Post('order/info')
+  getCustomOrderInfoByWebhook(@Body() dto: TAuditData) {
+    return this.webhookService.getCustomOrderInfoByWebhook(dto);
+  }
 }
