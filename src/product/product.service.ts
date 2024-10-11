@@ -294,97 +294,118 @@ export class ProductService {
       const { rows } = data;
       offset += limit;
 
+      console.log(
+        `Fetched ${rows.length} products from offset ${offset - limit}`,
+      );
+
       if (rows.length < limit) {
         hasMore = false;
       }
 
-      for (const product of rows) {
-        const existingProduct = await this.productModel.findOne({
-          code: product.code,
-        });
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-        const imageMetaHref = product.images?.meta?.href;
-        let picturePath: string | undefined;
-
-        const imageSyncConditions = {
-          [EImageAdd.WITH_IMAGE]: true,
-          [EImageAdd.WITH_IMAGE_FOR_EXIST]: existingProduct,
-          [EImageAdd.WITH_IMAGE_FOR_NEW]: !existingProduct,
-          [EImageAdd.WITHOUT_IMAGE]: false,
-        };
-
-        if (imageMetaHref && imageSyncConditions[image]) {
-          const imageResponse = await this.fetchProductsFromStock(
-            imageMetaHref,
-            token,
-            limit,
-            0,
-          );
-          const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
-
-          if (pictureHref) {
-            const pictureData = await this.fetchImageFromStock(
-              pictureHref,
-              token,
-            );
-            if (pictureData) {
-              if (existingProduct?.picture) {
-                await this.fileService.removeFile(existingProduct.picture);
-              }
-              picturePath = await this.fileService.createFile(
-                FileType.IMAGE,
-                pictureData,
-              );
-            }
-          }
+      const processProductsPromises = rows.map(async (product, index) => {
+        if (image !== EImageAdd.WITHOUT_IMAGE) {
+          await delay(index * 100);
         }
 
-        const price = product.salePrices;
+        try {
+          const existingProduct = await this.productModel.findOne({
+            code: product.code,
+          });
 
-        const priceRetail = priceWithoutLastTwoDigits(price[0].value); // Մանրածախ
+          let imageMetaHref: any;
 
-        const priceWholesale =
-          price.length > 1 ? priceWithoutLastTwoDigits(price[1].value) : 0; //Մեծածախ
-        const priceWildberries =
-          price.length > 2 ? priceWithoutLastTwoDigits(price[2].value) : 0; //Wildberries
+          if (product.images?.meta?.href) {
+            imageMetaHref = product.images?.meta?.href;
+          }
 
-        const parsedCount = product.stock ? Math.trunc(product.stock) : 0;
+          let picturePath: string | undefined;
 
-        if (existingProduct) {
-          await this.productModel.updateOne(
-            { code: existingProduct.code },
-            {
+          const imageSyncConditions = {
+            [EImageAdd.WITH_IMAGE]: true,
+            [EImageAdd.WITH_IMAGE_FOR_EXIST]: existingProduct,
+            [EImageAdd.WITH_IMAGE_FOR_NEW]: !existingProduct,
+            [EImageAdd.WITHOUT_IMAGE]: false,
+          };
+
+          if (imageMetaHref && imageSyncConditions[image]) {
+            const imageResponse = await this.fetchImageInfoByStock(
+              imageMetaHref,
+              token,
+            );
+
+            const pictureHref = imageResponse.data.rows[0]?.meta?.downloadHref;
+            if (pictureHref) {
+              if (image !== EImageAdd.WITHOUT_IMAGE) {
+                await delay(index * 100);
+              }
+              const pictureData = await this.fetchImageFromStock(
+                pictureHref,
+                token,
+              );
+              if (pictureData) {
+                if (existingProduct?.picture) {
+                  await this.fileService.removeFile(existingProduct.picture);
+                }
+                picturePath = await this.fileService.createFile(
+                  FileType.IMAGE,
+                  pictureData,
+                );
+              }
+            }
+          }
+
+          const price = product.salePrices;
+          const priceRetail = priceWithoutLastTwoDigits(price[0].value); // Retail price
+          const priceWholesale =
+            price.length > 1 ? priceWithoutLastTwoDigits(price[1].value) : 0;
+          const priceWildberries =
+            price.length > 2 ? priceWithoutLastTwoDigits(price[2].value) : 0;
+          const parsedCount = product.stock ? Math.trunc(product.stock) : 0;
+
+          if (existingProduct) {
+            await this.productModel.updateOne(
+              { code: existingProduct.code },
+              {
+                title: product.name,
+                code: product.code,
+                priceRetail,
+                priceWholesale,
+                priceWildberries,
+                count: parsedCount,
+                picture: picturePath,
+                idProductByStock: product.id,
+                information: product.description,
+              },
+            );
+            updatedCount++;
+          } else {
+            await this.productModel.create({
+              idProductByStock: product.id,
               title: product.name,
               code: product.code,
+              count: parsedCount,
               priceRetail,
               priceWholesale,
               priceWildberries,
-              count: parsedCount,
-              picture: picturePath,
-              idProductByStock: product.id,
-              information: product.description,
-            },
-          );
-          updatedCount++;
-        } else {
-          await this.productModel.create({
-            idProductByStock: product.id,
-            title: product.name,
-            code: product.code,
-            count: parsedCount,
-            priceRetail,
-            priceWholesale,
-            priceWildberries,
-            picture: picturePath || null,
-            information: product.description || '',
-            category: null,
-            discount: 0,
-            author: userId,
-          });
-          createdCount++;
+              picture: picturePath || null,
+              information: product.description || '',
+              category: null,
+              discount: 0,
+              author: userId,
+            });
+            createdCount++;
+          }
+        } catch (error) {
+          console.error(`Error processing product ${product.code}:`, error);
         }
-      }
+      });
+
+      await Promise.all(processProductsPromises);
     }
+
+    console.log(`Total created: ${createdCount}, updated: ${updatedCount}`);
 
     if (createdCount === 0 && updatedCount === 0) {
       throw new HttpException(
@@ -398,37 +419,31 @@ export class ProductService {
     );
 
     if (user && user.mail) {
-      const subject: string = `Ապրանքների սիխրոնիզացումը ավարտվեց`;
+      const subject: string = 'Ապրանքների սիխրոնիզացումը ավարտվեց';
       const storeName: string = 'MOBIART';
       const currentTime: Date = new Date();
 
       const html: string = `
-      <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
-      <div style="margin: 50px auto; width: 70%; padding: 20px 0">
-        <div style="border-bottom: 1px solid #eee">
-          <a href="" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600">${storeName}</a>
-        </div>
-        <div>
-            <p style="font-size: 1rem; font-weight: bold">Ստեղծվել է: <span style="font-weight: normal">${createdCount}</span></p>
-            <p style="font-size: 1rem; font-weight: bold">Փոփոխվել է: <span style="font-weight: normal">${updatedCount}</span></p>
-              <p style="font-size: 1rem; font-weight: bold">Ընդհանուր: <span style="font-weight: normal">${
-                createdCount + updatedCount
-              }</span></p>
-               <p style="font-size: 1rem; font-weight: bold">Նկարների սիխրոնիզացման տեսակը։ <span style="font-weight: normal">${imageSyncTypeTranslator}</span></p>
-            <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը սկսվել է։ <span style="font-weight: normal">${formatDate(
-              startTime,
-            )}</span></p>
-            <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը ավարտվել է։ <span style="font-weight: normal">${formatDate(
-              currentTime,
-            )}</span></p>
-        </div>
-        <hr style="border: none; border-top: 1px solid #eee" />
-        <div style="float: right; padding: 8px 0; color: #aaa; font-size: 0.8em; line-height: 1; font-weight: 300">
-          <p>${storeName} Inc</p>
-          <p>Armenia</p>
+        <div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2">
+        <div style="margin: 50px auto; width: 70%; padding: 20px 0">
+          <div style="border-bottom: 1px solid #eee">
+            <a href="" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600">${storeName}</a>
+          </div>
+          <div>
+              <p style="font-size: 1rem; font-weight: bold">Ստեղծվել է: <span style="font-weight: normal">${createdCount}</span></p>
+              <p style="font-size: 1rem; font-weight: bold">Փոփոխվել է: <span style="font-weight: normal">${updatedCount}</span></p>
+                <p style="font-size: 1rem; font-weight: bold">Ընդհանուր: <span style="font-weight: normal">${createdCount + updatedCount}</span></p>
+                 <p style="font-size: 1rem; font-weight: bold">Նկարների սիխրոնիզացման տեսակը։ <span style="font-weight: normal">${imageSyncTypeTranslator}</span></p>
+              <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը սկսվել է։ <span style="font-weight: normal">${formatDate(startTime)}</span></p>
+              <p style="font-size: 1rem; font-weight: bold">Սիխրոնիզացումը ավարտվել է։ <span style="font-weight: normal">${formatDate(currentTime)}</span></p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee" />
+          <div style="float: right; padding: 8px 0; color: #aaa; font-size: 0.8em; line-height: 1; font-weight: 300">
+            <p>${storeName} Inc</p>
+            <p>Armenia</p>
+          </div>
         </div>
       </div>
-    </div>
       `;
       await this.userService.sendToMail(user.mail, html, subject);
     }
@@ -813,7 +828,7 @@ export class ProductService {
     const authorizationHeader = {
       Authorization: token,
       'Accept-Encoding': 'gzip',
-      'Content-Type': 'image/png',
+      'Content-Type': 'application/json',
     };
 
     try {
@@ -833,6 +848,23 @@ export class ProductService {
       );
     }
   }
+
+  async fetchImageInfoByStock(url: string, token: string) {
+    const authorizationHeader = {
+      Authorization: token,
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      return await firstValueFrom(
+        this.httpService.get(url, { headers: authorizationHeader }),
+      );
+    } catch (error) {
+      console.warn(error.message);
+    }
+  }
+
   async fetchProductInfoFromStock(token: string, productStockId: string) {
     const url: string = `https://api.moysklad.ru/api/remap/1.2/entity/product/${productStockId}`;
 
