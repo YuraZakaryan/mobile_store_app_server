@@ -123,7 +123,6 @@ export class AuthService {
       }
       return user;
     }
-    throw new HttpException('Token not found', HttpStatus.NOT_FOUND);
   }
 
   async updateRefreshToken(dto: { refresh_token: string }) {
